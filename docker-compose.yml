@@ -7,9 +7,9 @@
 #                    internet" between the lab and the R&D site tier.
 #
 # To simulate the lab losing internet connectivity:
-#   docker network disconnect syngenta-edge-demo_edge-link lab-edge-server
+#   docker network disconnect <project_name>_edge-link lab-edge-server
 # To restore it:
-#   docker network connect syngenta-edge-demo_edge-link lab-edge-server
+#   docker network connect <project_name>_edge-link lab-edge-server
 # (Compose prefixes network names with the project/folder name — confirm the
 #  exact name with `docker network ls` after first `docker compose up`.)
 
