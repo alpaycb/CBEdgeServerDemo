@@ -190,79 +190,6 @@ narration flow:
    and **Pending sync drop back to 0** — that's the "zero data loss" proof
    point for the PoC scorecard.
 
-## Post-sync purge worker (`purger/purge_synced.py`)
-Frees edge storage by removing readings that Capella has confirmed.
-
-**How it stays safe.** Edge Server has no local-only purge endpoint: a REST
-DELETE creates a tombstone, and tombstones replicate. So the worker:
-- confirms each reading against **Capella App Services**, the final
-  destination, never against Site only. A Lab tombstone sent before Capella
-  has the reading would overwrite Site's copy before it reached the cloud,
-  and the reading would be lost on every tier.
-- deletes on the **Lab only**. The tombstone replicates to Site and cleans
-  Site's copy automatically.
-- relies on the App Endpoint's sync function to **reject** the tombstone
-  when it reaches App Services, so the central copy survives.
-- never touches the `::latest` pointer docs.
-
-**Mandatory: add the deletion guard to the App Endpoint's sync function**
-(Capella UI → App Services → your App Endpoint → Access Control / sync
-function). Keep your existing channel logic and add the `_deleted` check
-at the top:
-```js
-function (doc, oldDoc, meta) {
-  // Edge tiers free storage by deleting after Capella confirms receipt.
-  // Reject those tombstones so the central copy is never removed.
-  if (doc._deleted) {
-    throw({forbidden: "deletions from edge replication are not accepted"});
-  }
-  channel("iotdata");
-}
-```
-The app user the worker and dashboard use must be able to read channel
-`iotdata` (or grant `*` for the demo). Otherwise every check returns 403,
-nothing is ever purged, and the worker's log will say so.
-
-**Prerequisite:** the Site→Capella replication must be re-enabled (it is
-disabled in the current anonymous fallback). The local `db` uses the default
-collection, so either bind the App Endpoint to the bucket's default
-collection or re-add `"collections": ["iotdata.metrics"]` on both tiers (this
-works on the Windows machine).
-
-**Run** (third terminal). Preview first, then go live:
-```
-cd purger
-CAPELLA_APP_SERVICES_URL="https://<host>.apps.cloud.couchbase.com:4984/<app-endpoint>" \
-CAPELLA_USER="<user>" CAPELLA_PASSWORD="<password>" \
-DRY_RUN=true python3 purge_synced.py
-
-# once the sync guard is in place:
-SYNC_GUARD_CONFIRMED=yes PURGE_MIN_AGE_SECONDS=30 \
-CAPELLA_APP_SERVICES_URL=... CAPELLA_USER=... CAPELLA_PASSWORD=... \
-python3 purge_synced.py
-```
-On Windows PowerShell, set the variables with `$env:NAME="value"` first,
-then run `python purge_synced.py`.
-
-**Verify the guard before trusting it:** after the first live cycle, check
-that a purged reading still exists in Capella (Capella UI → Documents), and
-look for the rejected tombstone in `docker logs site-edge-server`. If the
-reading is gone from Capella, stop the worker: the sync function isn't
-rejecting deletions.
-
-**Demo narration:** during an outage the worker logs "not yet in Capella"
-and purges nothing, since the readings exist only at the edge. After
-reconnect, Capella confirms them and the worker frees Lab and Site storage.
-
-**Known limitations, and questions for the Edge Server PM:**
-- Tombstones stay on Lab and Site. They are small, but they accumulate.
-  Ask: is there a local purge, document expiration (TTL), or tombstone
-  compaction option for Edge Server?
-- Ask: does the replication config support a push filter that skips
-  deletions? That would remove the dependency on the sync-function guard.
-- Checks are one GET per reading, capped by `PURGE_BATCH_LIMIT`. Fine for
-  the demo; production volumes need a bulk check.
-
 ## Troubleshooting notes
 - **404 on simulator writes**: the REST path assumption
   (`<edge-server>/<db>/<doc-id>`) is the most likely thing to need a tweak —
@@ -289,10 +216,10 @@ reconnect, Capella confirms them and the worker frees Lab and Site storage.
 - **Site→Capella not connecting**: almost always Capella's Allowed IP list
   (add your current IP) or the App Endpoint not being Active yet.
 
-## Checking what's actually in the anonymous 'db' database
+## Checking what's actually in your database
 Don't assume default scope/collection — check it:
 ```
-curl -4 -k -v --max-time 10 https://127.0.0.1:59840/db
+curl -4 -k -v --max-time 10 https://127.0.0.1:59840/<db-name>
 ```
 Returns a `collections` object listing what's actually there (per Edge
 Server's REST API reference). Test without `-u` first, since no users file is
@@ -302,11 +229,27 @@ missing Authorization header gracefully before assuming it's needed at all.
 ## Reverting to the full setup (named collections + auth)
 Once Lab↔Site sync is stable on this anonymous fallback, revert deliberately,
 one variable at a time, rather than all at once:
-1. Re-add `"collections": ["iotdata.metrics"]` to both databases and the
+1. Re-add `"collections": ["labdata.metrics"]` to both databases and the
    lab→site replication first. Confirm sync still works before continuing.
 2. Re-add the `users` file references and bcrypt-hashed credentials. Confirm
    again.
 3. Only then re-add the Site→Capella replication block, with its own
-   `"collections": ["iotdata.metrics"]`, matching your App Endpoint's scope.
+   `"collections": ["labdata.metrics"]`, matching your App Endpoint's scope.
 This turns "did the last fix work" back into a single-variable question at
 each step, instead of the multi-variable guessing we were doing before.
+
+## Reverting Docker Containers and Simulation Data
+If you wish to revert all simulation data on local Docker Containers, you can run:
+
+```
+docker compose down
+```
+
+You can set up two Edge Servers from scratch by running following commands. You can 
+also run the second command to follow the Edge Server's operations (which were set 
+in config-json files under "logging" keys)
+
+```
+docker compose up -d
+docker compose logs -f
+```
