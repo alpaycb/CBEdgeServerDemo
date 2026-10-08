@@ -1,0 +1,52 @@
+# Network design (this is the part that makes the outage simulation work cleanly):
+#   lab-host-net  -> lab-edge-server only. Publishes 59840 to the Mac so the
+#                    simulator + dashboard (running natively, not in Docker) can
+#                    always reach the Lab Edge Server, even mid-outage.
+#   site-host-net -> site-edge-server only. Publishes 59841 to the Mac.
+#   edge-link     -> the ONLY network lab and site share. This represents "the
+#                    internet" between the lab and the R&D site tier.
+#
+# To simulate the lab losing internet connectivity:
+#   docker network disconnect syngenta-edge-demo_edge-link lab-edge-server
+# To restore it:
+#   docker network connect syngenta-edge-demo_edge-link lab-edge-server
+# (Compose prefixes network names with the project/folder name — confirm the
+#  exact name with `docker network ls` after first `docker compose up`.)
+
+networks:
+  lab-host-net:
+  site-host-net:
+  edge-link:
+
+services:
+  lab-edge-server:
+    image: couchbase/edge-server:enterprise
+    container_name: lab-edge-servercl
+    networks:
+      - lab-host-net
+      - edge-link
+    ports:
+      - "59840:59840"
+    volumes:
+      - ./config/lab-config.json:/opt/couchbase-edge-server/etc/config.json:ro
+      - ./config/lab-users.json:/opt/couchbase-edge-server/etc/users.json:ro
+      - lab-data:/opt/couchbase-edge-server/var/databases
+    restart: unless-stopped
+
+  site-edge-server:
+    image: couchbase/edge-server:enterprise
+    container_name: site-edge-servercl
+    networks:
+      - site-host-net
+      - edge-link
+    ports:
+      - "59841:59840"
+    volumes:
+      - ./config/site-config.json:/opt/couchbase-edge-server/etc/config.json:ro
+      - ./config/site-users.json:/opt/couchbase-edge-server/etc/users.json:ro
+      - site-data:/opt/couchbase-edge-server/var/databases
+    restart: unless-stopped
+
+volumes:
+  lab-data:
+  site-data:
