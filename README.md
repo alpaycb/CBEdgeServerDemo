@@ -1,10 +1,3 @@
-> **Current state (temporary):** falling back to the image's default anonymous
-> `db` database on default collection, on both servers, with the Site→Capella
-> leg disabled, to isolate whether our custom config (bcrypt users + named
-> collections) was the cause of the TLS-handshake hang we hit repeatedly.
-> This is a diagnostic step, not the target architecture — see "Reverting to
-> the full setup" at the bottom once Lab↔Site sync is proven stable here.
-
 # Edge Server Sync demo — Lab Edge Server → Site Edge Server → Capella App Services → Capella
 
 Minimal, single-R&D-site demo proving the sync mechanism end to end, including
@@ -94,6 +87,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 Verify your .env contains valid credentials for Couchbase Capella, AWS S3, and your LLM provider.
+
 3. A Couchbase Capella account with:
    - A database (bucket), scope, and collection created — this project assumes
      `<customer>-poc` / `iotdata` / `metrics` throughout. If you named yours
@@ -130,10 +124,13 @@ Watch the logs for both containers starting cleanly and (once Capella is
 configured) the site→Capella replication connecting.
 
 ## Run the demo
+(If you edit the environment variables in your local .env file, you can skip the inline variables. Make a copy from .env.example and edit all necessary values before running the scripts.)
+
 Terminal 1 — devices:
 ```
 cd simulator
-SENSOR_INTERVAL_SECONDS=5 python3 simulate_devices.py
+SENSOR_INTERVAL_SECONDS=5 
+python3 simulate_devices.py
 ```
 Terminal 2 — dashboard:
 ```
