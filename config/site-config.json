@@ -1,0 +1,38 @@
+{
+  "databases": {
+    "sitedata": {
+      "path": "/opt/couchbase-edge-server/var/databases/sitedata.cblite2",
+      "create": true,
+      "collections": [
+        "metrics"
+      ],
+      "enable_client_writes": false,
+      "enable_client_sync": true
+    }
+  },
+  "interface": "0.0.0.0:59840",
+  "logging": {
+    "console": true,
+    "domains":{
+        "REST":"verbose",
+        "DB":"verbose",
+        "Query":"verbose",
+        "Sync":"verbose"
+      }
+  },
+  "users": "/opt/couchbase-edge-server/etc/users.json",
+  "replications": [
+    {
+      "source": "sitedata",
+      "target": "wss://w0mqk77lxkar-ugx.apps.cloud.couchbase.com:4984/edgeserverdemo2",
+      "continuous": true,
+      "collections": [
+        "metrics"
+      ],
+      "auth": {
+        "user": "edgeServDemoUsr2",
+        "password": "edge+3rvDemoUsr"
+      }
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "databases": {
+    "labdata": {
+      "path": "/opt/couchbase-edge-server/var/databases/labdata.cblite2",
+      "create": true,
+      "collections": [
+        "metrics"
+      ],
+      "enable_client_writes": true,
+      "enable_client_sync": false
+    }
+  },
+  "interface": "0.0.0.0:59840",
+  "logging": {
+    "console": true,
+    "domains":{
+        "REST":"verbose",
+        "DB":"verbose",
+        "Query":"verbose",
+        "Sync":"verbose",
+        "Replicate":"verbose"
+      }
+  },
+  "users": "/opt/couchbase-edge-server/etc/users.json",
+  "replications": [
+    {
+      "source": "labdata",
+      "target": "ws://site-edge-server:59840/sitedata",
+      "continuous": true,
+      "collections": [
+        "metrics"
+      ],
+      "auth": {
+        "user": "labreplicator",
+        "password": "labsync123"
+      }
+    }
+  ]
+}

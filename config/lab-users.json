@@ -1,0 +1,6 @@
+{
+ "demo": {
+    "password": "$2b$12$11FlVc0bhrKT/R/1rBuffOPItBjg9N8rzQIz0DqQyqhsI2sFagg.6",
+    "roles": ["admin", "replicate"]
+  }
+}
