@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Edge-to-cloud sync across two R&amp;D sites</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --red:#EC1218;--orange:#FC9C0C;--burg:#97000F;--peach:#FFF0DB;--blue:#0266C2;
+  --bg:#FFFFFF;--panel:#F7F7F7;--card:#FFFFFF;--hair:#E6E6E6;--line:#A8A8A8;
+  --text:#000000;--body:#2E2E2E;--muted:#A8A8A8;--node:#2E2E2E;--cloud:#FFF0DB;--cloudtext:#000000;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#000000;--panel:#2E2E2E;--card:#000000;--hair:#2E2E2E;--line:#A8A8A8;
+    --text:#FFFFFF;--body:#F7F7F7;--muted:#A8A8A8;--node:#F7F7F7;--cloud:#97000F;--cloudtext:#FFFFFF;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#000000;--panel:#2E2E2E;--card:#000000;--hair:#2E2E2E;--line:#A8A8A8;
+  --text:#FFFFFF;--body:#F7F7F7;--muted:#A8A8A8;--node:#F7F7F7;--cloud:#97000F;--cloudtext:#FFFFFF;
+}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--body);font-family:'Open Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:16px;line-height:1.6}
+.wrap{max-width:1240px;margin:0 auto;padding:24px 20px 40px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+header svg{width:36px;height:36px;color:var(--red);flex:none}
+h1{margin:0;font-size:clamp(22px,3vw,32px);font-weight:500;letter-spacing:-.01em;line-height:1.1;color:var(--text)}
+.sub{margin:2px 0 0;color:var(--muted);font-size:15px}
+.stage-wrap{overflow-x:auto;margin:16px 0 8px}
+#diagram{display:block;width:100%;min-width:760px;height:auto}
+
+/* SVG styling */
+.panel{fill:var(--panel)}
+.card{fill:var(--card);stroke:var(--hair);stroke-width:1}
+.cloudcard{fill:var(--cloud)}
+.appsvc{fill:var(--card);stroke:var(--red);stroke-width:1.5}
+.site-title{font-size:15px;font-weight:700;fill:var(--text)}
+.box-title{font-size:13px;font-weight:600;fill:var(--text)}
+.lbl{font-size:11px;fill:var(--body)}
+.cnt{font-size:11px;font-weight:600;fill:var(--red)}
+.tag{font-size:10.5px;font-weight:600;fill:var(--muted);paint-order:stroke;stroke:var(--panel);stroke-width:5px;stroke-linejoin:round}
+.cloud-t{font-size:18px;font-weight:600;fill:var(--cloudtext)}
+.cloud-s{font-size:11px;fill:var(--cloudtext)}
+.cloud-c{font-size:12px;font-weight:700;fill:var(--cloudtext)}
+.app-t{font-size:12px;font-weight:700;fill:var(--text)}
+.app-s{font-size:10.5px;fill:var(--body)}
+.wire{fill:none;stroke:var(--line);stroke-width:1.5;stroke-linejoin:round;transition:stroke 220ms cubic-bezier(.16,1,.3,1)}
+.wire.down{stroke-dasharray:5 6;opacity:.6}
+.nd{fill:var(--card);stroke:var(--node);stroke-width:1.5}
+.nd-line{stroke:var(--node);stroke-width:1.5;fill:none}
+.led{fill:var(--red)}
+.led.off{fill:var(--muted)}
+.p-orange{fill:var(--orange)}
+.p-red{fill:var(--red)}
+.p-blue{fill:var(--blue)}
+.x-mark circle{fill:var(--card);stroke:var(--red);stroke-width:2}
+.x-mark path{stroke:var(--red);stroke-width:2.2;stroke-linecap:round}
+.badge rect{fill:var(--card);stroke:var(--red);stroke-width:1.5}
+.badge text{font-size:11px;font-weight:600;fill:var(--red)}
+
+/* Controls */
+.controls{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;margin-top:8px}
+#play{font:600 13px 'Open Sans',sans-serif;letter-spacing:.02em;border-radius:999px;border:0;background:var(--text);color:var(--bg);padding:10px 20px;cursor:pointer;min-width:92px}
+#play:hover{background:var(--burg);color:#fff}
+button:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.steps button{width:100%;text-align:left;background:none;border:0;padding:6px 0 10px;cursor:pointer;font:500 13px/1.3 'Open Sans',sans-serif;color:var(--muted);position:relative;border-top:2px solid var(--hair)}
+.steps button .n{display:block;font-weight:700;font-size:12px}
+.steps button[aria-current="step"]{color:var(--text)}
+.steps button .bar{position:absolute;left:0;top:-2px;height:2px;width:0;background:var(--red)}
+.steps button.done{color:var(--body)}
+.steps button.done .bar{width:100%;background:var(--line)}
+.narr{margin-top:18px;max-width:72ch}
+.narr h2{margin:0 0 4px;font-size:20px;font-weight:700;line-height:1.5;color:var(--text)}
+.narr p{margin:0}
+.legend{display:flex;flex-wrap:wrap;gap:18px;margin-top:20px;font-size:13px;color:var(--body)}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.legend i.dash{width:22px;height:0;border-radius:0;border-top:2px dashed var(--line)}
+@media (max-width:760px){
+  .controls{grid-template-columns:1fr}
+  .steps{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+
+.scen{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px}
+.scbtn{font:600 13px 'Open Sans',sans-serif;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:9px 16px;cursor:pointer}
+.scbtn:hover{background:var(--panel)}
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.pnl{background:var(--panel);border-radius:16px;padding:14px 16px}
+.pnl h3{margin:0 0 10px;font-size:14px;font-weight:700;color:var(--text)}
+.tg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tgl{display:flex;justify-content:space-between;align-items:center;gap:8px;font:500 13px/1.3 'Open Sans',sans-serif;text-align:left;background:var(--card);color:var(--text);border:1px solid var(--hair);border-radius:8px;padding:9px 12px;cursor:pointer}
+.tgl .s{font-weight:600;font-size:12px;color:var(--muted);white-space:nowrap}
+.tgl.isCut{border-color:var(--red)}
+.tgl.isCut .s{color:var(--red);font-weight:700}
+.knob{cursor:pointer}
+.knob circle{fill:var(--card);stroke:var(--red);stroke-width:2}
+.knob .cut{display:none}
+.knob.isCut .cut{display:inline}.knob.isCut .ok{display:none}
+.knob .ok{fill:var(--red)}
+.knob path{stroke:var(--red);stroke-width:2.2;stroke-linecap:round}
+.knob:hover circle{stroke-width:3}
+.badge.warn rect{stroke:var(--orange)}.badge.warn text{fill:var(--body)}
+.rate{display:inline-flex;align-items:center;gap:10px;font:600 13px 'Open Sans',sans-serif;color:var(--text);padding:0 6px}
+.rate input{accent-color:#EC1218;width:140px}
+.rate output{min-width:3.2em;color:var(--red)}
+@media (max-width:760px){.panels{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <svg viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M83.1,58.6c0,2.9-1.7,5.5-5,6.1c-5.8,1-17.9,1.6-28.1,1.6s-22.3-0.7-28.1-1.6c-3.3-0.6-5-3.2-5-6.1V39.4c0-2.9,2.3-5.7,5-6.1c1.7-0.3,5.6-0.6,8.8-0.6c1.2,0,2.2,0.9,2.2,2.3v13.3c5.9,0,11.1-0.3,17.1-0.3s11.2,0.3,17.2,0.3V35.1c0-1.4,1-2.3,2.2-2.3c3.2,0,7.1,0.3,8.8,0.6c2.7,0.4,5,3.2,5,6.1L83.1,58.6z M50,1C22.9,1,1,22.9,1,50s21.9,49,49,49s49-21.9,49-49S77.1,1,50,1L50,1z"/></svg>
+    <div>
+      <h1>Edge-to-cloud sync across two R&amp;D sites</h1>
+      <p class="sub">Couchbase Edge Server and Capella App Services</p>
+    </div>
+  </header>
+
+  <div class="stage-wrap">
+    <svg id="diagram" viewBox="0 0 1200 750" role="img" aria-label="Animated diagram: lab and field devices write to local Couchbase Edge Servers, which sync to site Edge Servers and then to Capella, including an offline scenario at the German site."></svg>
+  </div>
+
+  <div class="scen" role="group" aria-label="Scenarios">
+    <button id="play" type="button">Pause</button>
+    <button class="scbtn" id="reset" type="button">Reset counters</button>
+    <label class="rate">Device write rate <input id="rate" type="range" min="0.25" max="4" step="0.25" value="1"> <output id="rateOut">1×</output></label>
+    <button class="scbtn" data-s="restore" type="button">Restore all links</button>
+    <button class="scbtn" data-s="lab" type="button">Lab 1 DE loses its uplink</button>
+    <button class="scbtn" data-s="wan" type="button">Germany loses its WAN</button>
+    <button class="scbtn" data-s="uk" type="button">UK fully isolated</button>
+  </div>
+  <div class="panels" id="panels"></div>
+  <div class="narr" aria-live="polite"><h2 id="st"></h2><p id="sx"></p></div>
+  <div class="legend">
+    <span><i style="background:var(--orange)"></i>Device write over REST</span>
+    <span><i style="background:var(--red)"></i>One-way sync, upstream only</span>
+    <span><i class="dash"></i>Link offline</span>
+  </div>
+</div>
+
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg', W=1200;
+const svg=document.getElementById('diagram');
+function el(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);parent.appendChild(e);return e;}
+function txt(x,y,s,cls,parent,anchor){const t=el('text',{x:x,y:y,class:cls,'text-anchor':anchor||'middle'},parent);t.textContent=s;return t;}
+const gBack=el('g',{},svg), gWires=el('g',{},svg), gTags=el('g',{},svg), gPk=el('g',{},svg), gNodes=el('g',{},svg), gTop=el('g',{},svg);
+
+function server(x,y,big){
+  const w=big?58:46,h=big?42:34,g=el('g',{},gNodes);
+  el('rect',{x:x-w/2,y:y-h/2,width:w,height:h,rx:5,class:'nd'},g);
+  el('path',{d:`M${x-w/2+8},${y-4} H${x+w/2-16} M${x-w/2+8},${y+5} H${x+w/2-16}`,class:'nd-line'},g);
+  el('circle',{cx:x+w/2-9,cy:y-4,r:2.6,class:'led'},g);
+  el('circle',{cx:x+w/2-9,cy:y+5,r:2.6,class:'led'},g);
+}
+function gateway(x,y){
+  const g=el('g',{},gNodes);
+  el('path',{d:`M${x-9},${y-11} l-4,-9 M${x+9},${y-11} l4,-9`,class:'nd-line'},g);
+  el('rect',{x:x-18,y:y-11,width:36,height:22,rx:5,class:'nd'},g);
+  el('circle',{cx:x+9,cy:y,r:2.4,class:'led'},g);
+  el('path',{d:`M${x-11},${y} H${x+2}`,class:'nd-line'},g);
+}
+function meter(x,y){const g=el('g',{},gNodes);el('circle',{cx:x,cy:y,r:10,class:'nd'},g);el('path',{d:`M${x},${y} l5,-5`,class:'nd-line'},g);}
+function drone(x,y){
+  const g=el('g',{},gNodes);
+  el('path',{d:`M${x-9},${y-6} L${x+9},${y+6} M${x+9},${y-6} L${x-9},${y+6}`,class:'nd-line'},g);
+  [[-9,-6],[9,-6],[-9,6],[9,6]].forEach(([dx,dy])=>el('circle',{cx:x+dx,cy:y+dy,r:4,class:'nd'},g));
+  el('rect',{x:x-4,y:y-4,width:8,height:8,rx:2,class:'nd'},g);
+}
+function sensor(x,y){const g=el('g',{},gNodes);el('path',{d:`M${x},${y-10} L${x+10},${y} L${x},${y+10} L${x-10},${y} Z`,class:'nd'},g);el('circle',{cx:x,cy:y,r:2.6,class:'led'},g);}
+
+function prep(pts){const cum=[0];for(let i=1;i<pts.length;i++)cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));return {pts,cum,total:cum[cum.length-1]};}
+function wire(pts){return el('path',{d:'M'+pts.map(p=>p.join(',')).join(' L'),class:'wire'},gWires);}
+const rev=a=>a.slice().reverse();
+
+function badge(x,y,w){
+  const g=el('g',{class:'badge',style:'display:none'},gTop);
+  el('rect',{x:x-w/2,y:y-13,width:w,height:26,rx:13},g);
+  const t=txt(x,y+4,'','',g);return {g,t};
+}
+const LINKS=[];
+function link(o){
+  o.up=true;o.queue=0;o.acc=0;
+  o.knob=el('g',{class:'knob',role:'presentation'},gTop);
+  el('title',{},o.knob).textContent='Cut / restore: '+o.name;
+  el('circle',{cx:o.kx,cy:o.ky,r:11},o.knob);
+  el('circle',{cx:o.kx,cy:o.ky,r:4,class:'ok'},o.knob);
+  el('path',{class:'cut',d:`M${o.kx-5},${o.ky-5} l10,10 M${o.kx+5},${o.ky-5} l-10,10`},o.knob);
+  o.knob.addEventListener('click',()=>setLink(o,!o.up));
+  LINKS.push(o);return o;
+}
+
+/* cloud */
+el('rect',{x:450,y:18,width:300,height:146,rx:24,class:'cloudcard'},gBack);
+const mark=el('g',{transform:'translate(540,30) scale(0.22)'},gNodes);
+el('path',{fill:'#EC1218',d:'M83.1,58.6c0,2.9-1.7,5.5-5,6.1c-5.8,1-17.9,1.6-28.1,1.6s-22.3-0.7-28.1-1.6c-3.3-0.6-5-3.2-5-6.1V39.4c0-2.9,2.3-5.7,5-6.1c1.7-0.3,5.6-0.6,8.8-0.6c1.2,0,2.2,0.9,2.2,2.3v13.3c5.9,0,11.1-0.3,17.1-0.3s11.2,0.3,17.2,0.3V35.1c0-1.4,1-2.3,2.2-2.3c3.2,0,7.1,0.3,8.8,0.6c2.7,0.4,5,3.2,5,6.1L83.1,58.6z M50,1C22.9,1,1,22.9,1,50s21.9,49,49,49s49-21.9,49-49S77.1,1,50,1L50,1z'},mark);
+txt(570,48,'Capella','cloud-t',gNodes,'start');
+txt(600,66,'Central database (AWS)','cloud-s',gNodes);
+const cloudCnt=txt(600,84,'0 documents','cloud-c',gNodes);
+el('rect',{x:520,y:96,width:160,height:48,rx:8,class:'appsvc'},gNodes);
+txt(600,116,'App Services','app-t',gNodes);
+txt(600,132,'Sync endpoint','app-s',gNodes);
+
+function buildSite(cfg){
+  const X=x=>cfg.mirror?W-x:x;
+  const P=pts=>pts.map(([x,y])=>[X(x),y]);
+  const R=(x,y,w,h)=>({x:cfg.mirror?W-x-w:x,y,w,h});
+  const rect=(r,cls,rx)=>el('rect',{x:r.x,y:r.y,width:r.w,height:r.h,rx:rx,class:cls},gBack);
+  const pn=R(20,190,560,550); rect(pn,'panel',16);
+  txt(pn.x+20,pn.y+30,cfg.title,'site-title',gBack,'start');
+  const site={code:cfg.code,name:cfg.short,labs:[],count:0,acc:{ing:0,down:0}};
+
+  [[240,'Lab 1 '+cfg.code],[410,'Lab n '+cfg.code]].forEach(([y0,name])=>{
+    const b=R(40,y0,320,140); rect(b,'card',12);
+    txt(b.x+16,y0+26,name,'box-title',gBack,'start');
+    const Y=y0+80, devs=[70,100,130];
+    devs.forEach(dx=>meter(X(dx),Y));
+    txt(X(100),y0+112,'Smart meters (1..n)','lbl',gNodes);
+    gateway(X(210),Y); txt(X(210),y0+112,'Lab gateway','lbl',gNodes);
+    server(X(300),Y); txt(X(300),y0+112,'Edge Server','lbl',gNodes);
+    const cnt=txt(X(300),y0+127,'0 docs','cnt',gNodes);
+    wire(P([[140,Y],[300,Y]]));
+    const syncPts=P([[300,Y],[390,Y],[390,420],[440,420]]);
+    txt(X(168),Y+17,'REST API','tag',gTags);
+    txt(X(356),Y-8,'Sync','tag',gTags);
+    const lab={name,ingest:devs.map(dx=>prep(P([[dx,Y],[300,Y]]))),sync:prep(syncPts),down:prep(rev(syncPts)),count:0,cnt};
+    lab.link=link({name:name+' Edge Server → Site Edge Server',short:name+' uplink',site,wire:wire(syncPts),kx:X(390),ky:Y<400?350:455,
+      holder:'Edge Server',badge:badge(X(290),y0+46,120),type:'cb',label:name});
+    site.labs.push(lab);
+  });
+
+  const fb=R(40,580,130,146); rect(fb,'card',12);
+  txt(fb.x+16,606,'Field','box-title',gBack,'start');
+  drone(X(105),640); txt(X(105),664,'Drones','lbl',gNodes);
+  sensor(X(105),690); txt(X(105),714,'Field sensors','lbl',gNodes);
+  gateway(X(270),660); txt(X(270),690,'Field gateway','lbl',gNodes);
+  wire(P([[118,640],[230,640],[230,690],[118,690]])); wire(P([[230,660],[270,660]]));
+  txt(X(196),665,'REST API','tag',gTags);
+  site.fieldIn=[prep(P([[118,640],[230,640],[230,660],[270,660]])),prep(P([[118,690],[230,690],[230,660],[270,660]]))];
+  const fPts=P([[270,660],[440,660],[440,420]]);
+  site.fieldUp=prep(fPts);
+  site.field=link({name:'Field gateway → Site Edge Server ('+cfg.code+')',short:'Field uplink',site,wire:wire(fPts),kx:X(360),ky:660,
+    badge:badge(X(290),604,150),type:'rest',label:'Field '+cfg.code});
+
+  server(X(440),420,true);
+  txt(X(452),372,'Site Edge Server','box-title',gNodes);
+  site.cnt=txt(X(452),388,'0 docs','cnt',gNodes);
+  gateway(X(530),420); txt(X(530),450,'Site gateway','lbl',gNodes);
+  const upPts=P([[440,420],[530,420],[530,200],[570,146]]);
+  wire(P([[440,420],[530,420]]));
+  txt(X(530),320,'WAN sync','tag',gTags);
+  site.up=prep(upPts); site.downUp=prep(rev(upPts));
+  site.wan=link({name:'Site Edge Server → Capella ('+cfg.code+' WAN)',short:'WAN to Capella',site,wire:wire(P([[530,420],[530,200],[570,146]])),kx:X(530),ky:250,
+    badge:badge(X(510),512,130),type:'cb',label:cfg.short+' site'});
+  return site;
+}
+const UK=buildSite({mirror:false,code:'UK',short:'UK',title:'R&D site 1, UK'});
+const DE=buildSite({mirror:true,code:'DE',short:'German',title:'R&D site 2, Germany'});
+const SITES=[UK,DE];
+
+/* toggle panels */
+const panels=document.getElementById('panels');
+SITES.forEach(s=>{
+  const d=document.createElement('div');d.className='pnl';
+  d.innerHTML=`<h3>${s.code==='UK'?'R&D site 1, UK':'R&D site 2, Germany'}</h3><div class="tg"></div>`;
+  const tg=d.querySelector('.tg');
+  [s.labs[0].link,s.labs[1].link,s.field,s.wan].forEach(l=>{
+    const b=document.createElement('button');b.type='button';b.className='tgl';
+    b.innerHTML=`<span>${l.short.replace(/ (UK|DE) uplink/,' $1 uplink')}</span><span class="s"></span>`;
+    b.addEventListener('click',()=>setLink(l,!l.up));
+    l.btn=b;tg.appendChild(b);
+  });
+  panels.appendChild(d);
+});
+
+function setLink(l,up){
+  l.up=up;
+  l.wire.classList.toggle('down',!up);
+  l.knob.classList.toggle('isCut',!up);
+  l.btn.classList.toggle('isCut',!up);l.btn.setAttribute('aria-pressed',String(!up));
+  l.btn.querySelector('.s').textContent=up?'Connected':'Cut';
+  l.btn.setAttribute('aria-label',l.name+(up?': connected. Press to cut.':': cut. Press to restore.'));
+}
+LINKS.forEach(l=>setLink(l,true));
+
+/* packets */
+const packets=[];let cloud=0;
+function spawn(route,color,onArrive,speed){
+  if(packets.length>300){onArrive&&onArrive();return;}
+  const c=el('circle',{r:4.5,class:'p-'+color,cx:route.pts[0][0],cy:route.pts[0][1]},gPk);
+  packets.push({route,d:0,el:c,onArrive,speed:speed||230});
+}
+function place(p){
+  const r=p.route;let i=1;while(i<r.cum.length-1&&r.cum[i]<p.d)i++;
+  const a=r.pts[i-1],b=r.pts[i],seg=r.cum[i]-r.cum[i-1]||1,t=Math.min(1,(p.d-r.cum[i-1])/seg);
+  p.el.setAttribute('cx',a[0]+(b[0]-a[0])*t);p.el.setAttribute('cy',a[1]+(b[1]-a[1])*t);
+}
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+function toCloud(s,fast){spawn(s.up,'red',()=>{cloud++;},fast?420:230);}
+function siteArrive(s){s.count++; if(s.wan.up)toCloud(s); else s.wan.queue++;}
+function labToSite(s,lab,fast){spawn(lab.sync,'red',()=>siteArrive(s),fast?420:230);}
+function fieldToSite(s,fast){spawn(s.fieldUp,'orange',()=>siteArrive(s),fast?420:230);}
+
+/* scenarios */
+const all=on=>LINKS.forEach(l=>setLink(l,on));
+document.querySelectorAll('.scbtn').forEach(b=>b.addEventListener('click',()=>{
+  const s=b.dataset.s; all(true);
+  if(s==='lab')setLink(DE.labs[0].link,false);
+  if(s==='wan')setLink(DE.wan,false);
+  if(s==='uk'){setLink(UK.wan,false);setLink(UK.labs[0].link,false);setLink(UK.labs[1].link,false);setLink(UK.field,false);}
+}));
+let playing=!matchMedia('(prefers-reduced-motion: reduce)').matches;
+const playBtn=document.getElementById('play');
+playBtn.textContent=playing?'Pause':'Play';
+playBtn.addEventListener('click',()=>{playing=!playing;playBtn.textContent=playing?'Pause':'Play';});
+
+let rate=1;
+const rateIn=document.getElementById('rate'),rateOut=document.getElementById('rateOut');
+rateIn.addEventListener('input',()=>{rate=parseFloat(rateIn.value);rateOut.textContent=rate+'×';});
+document.getElementById('reset').addEventListener('click',()=>{
+  packets.forEach(p=>p.el.remove());packets.length=0;cloud=0;
+  SITES.forEach(s=>{s.count=0;s.acc.ing=0;s.labs.forEach(l=>l.count=0);});
+  LINKS.forEach(l=>{l.queue=0;l.acc=0;});
+});
+/* status narration */
+const st=document.getElementById('st'),sx=document.getElementById('sx');
+function narrate(){
+  const cut=LINKS.filter(l=>!l.up);
+  const held=LINKS.filter(l=>l.type==='cb'&&l.queue>0), retry=LINKS.filter(l=>l.type==='rest'&&l.queue>0);
+  if(!cut.length&&!held.length&&!retry.length){
+    st.textContent='All links up';
+    sx.textContent='Devices write to their local Edge Server, labs and field sync to the site, sites push to App Services in Capella. Data flows one way, upstream only. Cut any link to see what happens.';return;
+  }
+  if(!cut.length){st.textContent='Links restored, catching up';
+    sx.textContent='Queued changes are syncing upstream automatically. Nothing to re-upload by hand.';return;}
+  st.textContent=cut.length===1?cut[0].name+' is cut':cut.length+' links cut';
+  const parts=[];
+  const cbCut=cut.filter(l=>l.type==='cb');
+  if(cbCut.length)parts.push('Everything below the break keeps reading and writing locally. Changes wait on the Edge Server that lost its uplink and sync automatically when it returns.');
+  if(cut.some(l=>l.type==='rest'))parts.push('The field gateway is not a Couchbase node, so it is only as resilient as its own retry buffer. The Edge Server hops hold data durably; this hop does not.');
+  sx.textContent=parts.join(' ');
+}
+
+/* loop */
+let last=performance.now(),nt=0;
+function tick(now){
+  const dt=Math.min(0.05,(now-last)/1000);last=now;
+  if(playing){
+    SITES.forEach(s=>{
+      s.acc.ing+=dt;
+      const iv=0.32/rate;
+      while(s.acc.ing>iv){
+        s.acc.ing-=iv;
+        if(Math.random()<0.22){
+          spawn(pick(s.fieldIn),'orange',()=>{if(s.field.up)fieldToSite(s);else s.field.queue++;});
+        }else{
+          const lab=pick(s.labs);
+          spawn(pick(lab.ingest),'orange',()=>{lab.count++;if(lab.link.up)labToSite(s,lab);else lab.link.queue++;});
+        }
+      }
+    });
+    LINKS.forEach(l=>{
+      if(!l.up||l.queue<=0)return;
+      l.acc+=dt;
+      while(l.acc>0.05&&l.queue>0){
+        l.acc-=0.05;l.queue--;
+        const s=l.site;
+        if(l===s.wan)toCloud(s,true);
+        else if(l===s.field)fieldToSite(s,true);
+        else labToSite(s,s.labs.find(x=>x.link===l),true);
+      }
+    });
+    for(let i=packets.length-1;i>=0;i--){
+      const p=packets[i];p.d+=p.speed*dt;
+      if(p.d>=p.route.total){p.el.remove();packets.splice(i,1);p.onArrive&&p.onArrive();}
+      else place(p);
+    }
+  }
+  cloudCnt.textContent=cloud.toLocaleString('en')+' documents';
+  SITES.forEach(s=>{s.cnt.textContent=s.count.toLocaleString('en')+' docs';s.labs.forEach(l=>l.cnt.textContent=l.count.toLocaleString('en')+' docs');});
+  LINKS.forEach(l=>{
+    const b=l.badge;
+    if(!l.up||l.queue>0){
+      b.g.style.display='';b.g.classList.toggle('warn',l.type==='rest');
+      b.t.textContent=l.type==='rest'?(l.up?'Retrying: ':'Gateway retrying: ')+l.queue
+        :(l.up?'Catching up: '+l.queue:'Offline: '+l.queue+' queued');
+    }else b.g.style.display='none';
+  });
+  nt+=dt;if(nt>0.25){nt=0;narrate();}
+  requestAnimationFrame(tick);
+}
+narrate();requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
