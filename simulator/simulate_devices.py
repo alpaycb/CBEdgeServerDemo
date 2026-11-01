@@ -36,6 +36,7 @@ AUTH = (USER, PASSWORD) if USER else None
 INTERVAL = int(os.environ.get("SENSOR_INTERVAL_SECONDS", "5"))
 SITE = os.environ.get("SITE_NAME", "uk")
 LAB = os.environ.get("LAB_NAME", "lab1")
+LATEST_KEY = os.environ.get("LATEST_KEY", "latest")
 
 DEVICES = [
     "ambr250-bioreactor01-vessel01",
@@ -47,7 +48,7 @@ def history_doc_id(device_id: str, ts: int) -> str:
 
 
 def latest_doc_id(device_id: str) -> str:
-    return f"{SITE}::{LAB}::{device_id}::latest"
+    return f"{SITE}::{LAB}::{device_id}::{LATEST_KEY}"
 
 
 def reading(device_id: str, ts: int) -> dict:
@@ -56,6 +57,7 @@ def reading(device_id: str, ts: int) -> dict:
         "lab": LAB,
         "device_id": device_id,
         "timestamp": ts,
+        "edge_ts_ms": int(time.time() * 1000),
         "metrics": [
             {"name": "stir_speed", "value": round(random.uniform(780.0, 820.0), 1), "unit": "rpm"}
         ],

@@ -13,19 +13,20 @@ the two Edge Servers only; the simulator and dashboard run natively in Python.
   internet: the lab keeps accepting writes locally; nothing propagates
   upstream until the link is restored, at which point it catches up.
 
-## Why named collections, not `_default`
+## Named collections or `_default` collection as an alternative
 Capella App Services App Endpoints are scoped to specific named collections.
 If an Edge Server replication doesn't specify `collections` (or the local
 database doesn't have that collection declared), Edge Server falls back to
 `_default`, which your App Endpoint doesn't recognize — this fails with
 `"Collection property not specified and default collection is not configured
-for this database"`. Fix: declare the same named collection
-(`iotdata.metrics`, matching the Capella bucket/scope/collection you
-created) on **every** database and replication in the chain — both local
+for this database"`. Fix: 
+- either declare the same named collection (`iotdata.metrics`), or
+- use `_default` 
+
+matching the Capella bucket/scope/collection you created) on **every** database and replication in the chain — both local
 databases (`labdata`, `sitedata`) and both replication legs (lab→site,
 site→Capella). REST calls then address it as one dot-joined keyspace segment:
-`{db}.{scope}.{collection}`, e.g. `labdata.iotdata.metrics`, not
-`{db}/{scope}.{collection}` as separate path segments.
+`{db}.{scope}.{collection}`, e.g. `labdata.iotdata.metrics` or `labdata._default_.metrics`.
 
 ## Document schema
 Each reading writes two documents (see `simulator/simulate_devices.py`):
@@ -90,7 +91,7 @@ Verify your .env contains valid credentials for Couchbase Capella, AWS S3, and y
 
 3. A Couchbase Capella account with:
    - A database (bucket), scope, and collection created — this project assumes
-     `<customer>-poc` / `iotdata` / `metrics` throughout. If you named yours
+     `<bucket>` / `iotdata` / `metrics` throughout. If you named yours
      differently, update the `collections` arrays in `config/lab-config.json`
      and `config/site-config.json`, plus `EDGE_DB` in the simulator and the
      keyspace strings in the dashboard, to match.
@@ -129,7 +130,7 @@ configured) the site→Capella replication connecting.
 Terminal 1 — devices:
 ```
 cd simulator
-SENSOR_INTERVAL_SECONDS=5 
+SENSOR_INTERVAL_SECONDS=5 \
 python3 simulate_devices.py
 ```
 Terminal 2 — dashboard:
@@ -159,14 +160,13 @@ docker network connect <your_folder>_edge-link lab-edge-server
 Site and Capella should catch up to Lab's current value within a few seconds
 — that catch-up moment is the one to narrate live in the room.
 
-## Live demo script: showing the outage and the catch-up
+## Live demo to showing the outage and the catch-up
 
 The dashboard's rightmost column, **Pending sync**, counts readings that exist
 on the Lab Edge Server but haven't reached the Site Edge Server yet. Suggested
 narration flow:
 
-1. Let it run normally for ~30s — point out all three tiers advancing
-   together, Pending sync at 0.
+1. Let it run normally for ~30s — point out all three tiers advancing together, Pending sync at 0.
 2. Disconnect:
    ```
    docker network disconnect <your_folder>_edge-link lab-edge-server
@@ -174,7 +174,7 @@ narration flow:
 3. Point out: Lab keeps advancing, Site/Capella freeze, **Pending sync starts
    climbing** — "these N readings are safely stored locally and will sync the
    moment connectivity returns, nothing is lost."
-4. Optional, for a technical audience — show the replication task itself
+4. Optional, for a technical audience: show the replication task itself
    reporting the outage, straight from Edge Server's own REST API:
    ```
    curl -4 -sk -u demo:demo123 https://127.0.0.1:59840/_active_tasks | python3 -m json.tool
@@ -242,7 +242,7 @@ each step, instead of the multi-variable guessing we were doing before.
 If you wish to revert all simulation data on local Docker Containers, you can run:
 
 ```
-docker compose down
+docker compose down -v
 ```
 
 You can set up two Edge Servers from scratch by running following commands. You can 

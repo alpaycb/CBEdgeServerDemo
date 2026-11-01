@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Edge-to-cloud sync, streamed in real time</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #ffffff; --panel: #f3f3f4; --card: #ffffff; --ink: #1d1d1f; --muted: #66666d;
+  --line: #b9b9bf; --rule: #e2e2e6; --red: #e3141b; --orange: #f0961a; --teal: #0b8a8f;
+  --capella: #fdeedb; --capella-line: #f1d1aa; --off: #a7a7ae;
+  --btn: #ffffff; --btn-ink: #1d1d1f; --primary: #1d1d1f; --primary-ink: #ffffff; --focus: #0b6fd6;
+  color-scheme: light;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1b1b1e; --panel: #252529; --card: #2e2e33; --ink: #ececef; --muted: #a4a4ac;
+    --line: #5f5f68; --rule: #3a3a40; --red: #ff4b50; --orange: #f5a83a; --teal: #2fc1c5;
+    --capella: #3a2b1b; --capella-line: #6b4f2d; --off: #6d6d75;
+    --btn: #2e2e33; --btn-ink: #ececef; --primary: #ececef; --primary-ink: #1b1b1e; --focus: #5aa9ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1b1b1e; --panel: #252529; --card: #2e2e33; --ink: #ececef; --muted: #a4a4ac;
+  --line: #5f5f68; --rule: #3a3a40; --red: #ff4b50; --orange: #f5a83a; --teal: #2fc1c5;
+  --capella: #3a2b1b; --capella-line: #6b4f2d; --off: #6d6d75;
+  --btn: #2e2e33; --btn-ink: #ececef; --primary: #ececef; --primary-ink: #1b1b1e; --focus: #5aa9ff;
+  color-scheme: dark;
+}
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px; line-height: 1.5;
+}
+main { max-width: 1240px; margin: 0 auto; padding: 28px 20px 48px; }
+h1 { font-size: clamp(24px, 3.2vw, 34px); line-height: 1.15; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+/* Official Couchbase full logo, unmodified files: red-black on light, red-white on dark.
+   Clear space below it is at least the width of the couch shape. */
+.brand { margin: 0 0 24px; line-height: 0; }
+.logo { height: clamp(24px, 3vw, 32px); width: auto; }
+.logo-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .logo-light { display: none; }
+  :root:not([data-theme="light"]) .logo-dark { display: inline; }
+}
+:root[data-theme="dark"] .logo-light { display: none; }
+:root[data-theme="dark"] .logo-dark { display: inline; }
+.subtitle { color: var(--muted); margin: 6px 0 20px; }
+.mapwrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+svg#map { display: block; width: 100%; min-width: 900px; height: auto; font-family: inherit; }
+
+/* map */
+.panel { fill: var(--panel); }
+.card { fill: var(--card); stroke: var(--rule); stroke-width: 1; }
+.capella { fill: var(--capella); stroke: var(--capella-line); stroke-width: 1; }
+.appsvc { fill: var(--card); stroke: var(--red); stroke-width: 1.6; }
+.ic { fill: var(--card); stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.ic-line { fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; }
+.ic-red { fill: var(--red); stroke: none; }
+.ic-teal { fill: none; stroke: var(--teal); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.link { fill: none; stroke: var(--line); stroke-width: 1.6; }
+.link.rest { stroke-dasharray: none; }
+.link.cdc { stroke: var(--teal); opacity: .55; }
+.link.off { stroke: var(--off); stroke-dasharray: 5 5; opacity: 1; }
+.dot { stroke: var(--card); stroke-width: 1.4; }
+.dot.rest { fill: var(--orange); }
+.dot.sync { fill: var(--red); }
+.dot.cdc { fill: var(--teal); }
+.pulse { transform-box: fill-box; transform-origin: center; }
+.t-site { font-size: 15px; font-weight: 600; fill: var(--ink); }
+.t-unit { font-size: 13px; font-weight: 600; fill: var(--ink); }
+.t-big { font-size: 19px; font-weight: 600; fill: var(--ink); }
+.t-label { font-size: 11.5px; fill: var(--ink); }
+.t-strong { font-size: 12.5px; font-weight: 600; fill: var(--ink); }
+.t-small { font-size: 10.5px; fill: var(--muted); }
+.t-count { font-size: 11.5px; font-weight: 500; fill: var(--red); }
+.t-teal { font-size: 11.5px; font-weight: 500; fill: var(--teal); }
+.t-pend { font-size: 11px; font-weight: 600; fill: var(--red); }
+.t-value { font-size: 14px; font-weight: 600; fill: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* controls */
+.controls { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; margin: 22px 0 18px; }
+.controls .gap { flex-basis: 12px; }
+button {
+  font: inherit; font-size: 14px; font-weight: 500; color: var(--btn-ink); background: var(--btn);
+  border: 1px solid var(--line); border-radius: 999px; padding: 8px 16px; cursor: pointer;
+}
+button:hover { border-color: var(--ink); }
+button.primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); min-width: 84px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rate { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; }
+.rate input { accent-color: var(--red); width: 130px; }
+.rate output { color: var(--red); font-variant-numeric: tabular-nums; min-width: 2.2em; }
+
+.status { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
+.group { background: var(--panel); border-radius: 14px; padding: 14px 16px 16px; }
+.group h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.toggle {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  border-radius: 10px; padding: 9px 12px; text-align: left; width: 100%;
+}
+.toggle .state { color: var(--muted); font-size: 13px; font-weight: 400; }
+.toggle[aria-checked="false"] { border-color: var(--red); }
+.toggle[aria-checked="false"] .state { color: var(--red); font-weight: 600; }
+
+.story { margin-top: 26px; max-width: 72ch; }
+.story h2 { font-size: 22px; font-weight: 600; margin: 0 0 6px; }
+.story p { margin: 0 0 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 18px; font-size: 13.5px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.legend i.dash { width: 22px; height: 0; border-radius: 0; border-top: 2px dashed var(--off); }
+.note { font-size: 13px; color: var(--muted); margin-top: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <img class="logo logo-light" src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1uYW1lPSJMYXllciAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNDM2IDI3MC45NyI+CiAgPGRlZnM+CiAgICA8c3R5bGU+CiAgICAgIC5jbHMtMSB7CiAgICAgICAgZmlsbDogI2ZmZjsKICAgICAgfQoKICAgICAgLmNscy0yIHsKICAgICAgICBmaWxsOiAjZWMxMjE4OwogICAgICB9CiAgICA8L3N0eWxlPgogIDwvZGVmcz4KICA8Zz4KICAgIDxwYXRoIGQ9Ik0xMDMzLjkzLDEwNS4zNGgwYy0xNC41NS03Ljg4LTMzLjI4LTcuODUtNDcuNjkuNDktMy4zNCwxLjkzLTYuNDgsNC4zOS04Ljk2LDcuMjdsLTMuMjksMy44NHYtNjEuNDRoLTMyLjg2djE1OC44NWgzMi44M2wuMDktMTQuMzVjMy4xNiw0LjE2LDYsNy4yOSwxMC4wNyw5Ljg4LDcuMTQsNC41NSwxNS4xOCw2LjY5LDIzLjc1LDcuMSwzMS4xNCwxLjQ3LDUzLjgyLTI0LjMxLDU1LjQ0LTU0LjY2LDEuMjUtMjMuMzItOC42OC00NS43Ni0yOS4zOC01Ni45OFpNMTAwMS43MSwxODcuMjJjLTE1Ljk5LDAtMjguOTUtMTIuOTUtMjguOTUtMjguOTVzMTIuOTUtMjguOTUsMjguOTUtMjguOTUsMjguOTQsMTIuOTYsMjguOTQsMjguOTUtMTIuOTUsMjguOTUtMjguOTQsMjguOTVaIi8+CiAgICA8cGF0aCBkPSJNODk0LjM4LDEwMC4yN2MtMTcuNzQtMy4xMi0zMi43OS44OS00My4zOSwxNS45OHYtNjAuNzZoLTMzLjJ2MTU4Ljg1aDMzLjIxczAtNjEuOTgsMC02MS45OGMuNzYtMTIuNCw3LjkyLTIyLjQ3LDIwLjYyLTIyLjY2LDQuNy0uMDcsOS4yNS44MywxMi45NiwzLjczLDMuMjksMi41OSw1Ljk5LDYuMDcsNi41NywxMC4yMWwxLjExLDcuN3Y2My4wMWgzMy4xOXYtNjkuMjFjLS4xOS0xMC4yMy0xLjU3LTE5LjEtNi45Mi0yOC01LjM0LTguOTEtMTMuOTMtMTQuODgtMjQuMTUtMTYuODdaIi8+CiAgICA8cGF0aCBkPSJNNDI0LjIxLDE3OC4xOGMtOC42NCwzLjk2LTE3Ljc4LDUuNzgtMjcuMzUsNS40Mi0xOC4wMy0uNTItMzQuNy0xMS42Mi00MS43Ni0yOC4xMi01LjU5LTEzLjA0LTUuNi0yNy43MS0uMS00MC43NCw2LjctMTUuODcsMjEuMDctMjYuNzMsMzguMi0yOC41MiwxNi45OC0xLjc3LDMxLjMxLDMuNjIsNDUuMTEsMTMuNzV2LTM2LjI1bC00LjgyLTIuNTItNC4yNC0yYy0xOS40OC05LjItNDUuNDMtOC42MS02NS4wNS4zMS0xOS44LDktMzQuNjYsMjMuODktNDIuNjcsNDQuMTQtNy4yNiwxOC4zNi03LjU5LDM5LjY2LTEuNzEsNTguMzIsNS4zLDE2Ljg0LDE1Ljk0LDMxLjI1LDMwLjQ0LDQxLjEyLDIuNzksMS45LDUuNTIsMy42NSw4LjUzLDUuMDhsNC44NywyLjMxYzI0LjYyLDEwLjMzLDUxLjU0LDguODksNzQuODktNC4zMWguMDJsLS4wMy0zNi4xMmMtNC45LDMuMjYtOS4zMiw1LjgzLTE0LjM0LDguMTRaIi8+CiAgICA8cGF0aCBkPSJNMTE2NC40NCwxMTYuNDlsLTMuNjQtNC4yN2MtMy44Ny00LjU0LTkuMDEtNy41MS0xNC42OS05LjU2LTI0LjgtOC45Mi01MC4yOCwxLjMxLTYzLjE3LDI0LjI3LTEwLjMyLDE4LjM5LTEwLjUsNDIuNTktLjgxLDYxLjMsMTIuMTgsMjMuNDYsMzguMzksMzQuODEsNjMuNDMsMjUuNjgsNy45NC0yLjg5LDEzLjg2LTcuODYsMTguNzktMTQuMDhoMGwuMTcsMTQuNTJoMzIuMzh2LTExMi4xOGgtMzIuNGwtLjA3LDE0LjMzWk0xMTM2Ljc2LDE4Ny4yMWMtMTUuOTgsMC0yOC45NC0xMi45NS0yOC45NC0yOC45NXMxMi45NS0yOC45NSwyOC45NC0yOC45NSwyOC45NSwxMi45NiwyOC45NSwyOC45NS0xMi45NSwyOC45NS0yOC45NSwyOC45NVoiLz4KICAgIDxwYXRoIGQ9Ik01MTQuNzQsOTguMTNjLTMzLjIyLDAtNjAuMTQsMjYuOTMtNjAuMTQsNjAuMTRzMjYuOTIsNjAuMTQsNjAuMTQsNjAuMTQsNjAuMTQtMjYuOTMsNjAuMTQtNjAuMTQtMjYuOTMtNjAuMTQtNjAuMTQtNjAuMTRaTTUxNC43MywxODYuNzNjLTE1LjcyLDAtMjguNDYtMTIuNzQtMjguNDYtMjguNDZzMTIuNzQtMjguNDYsMjguNDYtMjguNDYsMjguNDYsMTIuNzQsMjguNDYsMjguNDYtMTIuNzQsMjguNDYtMjguNDYsMjguNDZaIi8+CiAgICA8cGF0aCBkPSJNMTQyOC44NywxMjguNTJjLTQuOTktMTAuMjEtMTUuNzctMjAuNjUtMjYuMi0yNC41NmwtNS4xOC0xLjkzYy0yNi40LTcuODctNTQuNDksMS4xNS02OC42OSwyNS4yN2wtMy40Miw2LjgyYy0zLjgzLDkuMDYtNS4xNCwxOC42OC00LjU0LDI4LjU4LDEuMzEsMjIuMDMsMTMuNjYsNDEuMzgsMzQuMTQsNDkuODEsMTMuMTgsNS40MywyOC4xNyw2LjA1LDQyLjAxLDIuODYsMTUuNjgtMy45NCwyNy43OS0xMy41OSwzNS4xOS0yNy44NGwtMjguMDctMTEuMTNjLTQuNDcsNy40Ni0xMC41MSwxMi40OC0xOS4zOSwxMy4zNWgwYy01LjE5LjU3LTEwLjE2LjUyLTE0LjY2LTEuNTVsLTMuOTQtMS44Mi00LjQ4LTMuMDNjLTQuMTMtMi44LTguMjYtMTAuMDctOC40Ny0xNS45OGg4Mi40MWMxLjMyLTEzLjQ1LS41LTI2Ljg2LTYuNzItMzguODVaTTE0MDMuNDUsMTQ1LjgzczAsMCwwLDBsLTQ5Ljk2LjAyYy45OS04LjM3LDYuOTItMTQuODQsMTQuNjctMTguNDcsNi44OS0zLjI0LDE1LjU2LTIuOCwyMi41MS40MiwyLjkzLDEuMzYsNS4yNiwzLjUxLDcuNTEsNS43OSwyLjg2LDMuMzMsNC41Myw2Ljk3LDUuMjcsMTIuMjRoMFoiLz4KICAgIDxwb2x5Z29uIHBvaW50cz0iMTQwNy40NSAxNDUuODMgMTQwNy40NSAxNDUuODIgMTQwNy40NSAxNDUuODIgMTQwNy40NSAxNDUuODMiLz4KICAgIDxwYXRoIGQ9Ik02NjQuMzUsMTYxLjc2Yy0uMTYsMTAuMDctMy40OCwxOS43LTEyLjg1LDIzLjU5LTMuNTUsMS40Ny03LjM2LDEuNzEtMTEuMTgsMS4zMi0xMS40Ny0xLjE3LTE2LjU0LTExLjIxLTE2LjY3LTIyLjQydi02Mi4wOWgtMzMuMDl2NzEuNTRjLjQxLDEzLjQxLDQuNDEsMjYuNTMsMTQuNzUsMzUuMDUsMy42MSwyLjk3LDcuNTIsNS4xOCwxMi4wNiw2LjUxLDguMzgsMi40NSwxNy4yNiwyLjc4LDI1LjcxLjUzLDguOTctMi4zOSwxNS44Ny03LjgsMjEuMTgtMTUuNDhsLjEzLDE0LjAzaDMzLjA3di0xMTIuMThoMHMtMzMuMTEsMC0zMy4xMSwwdjU5LjZaIi8+CiAgICA8cGF0aCBkPSJNMTI3My41MiwxNDUuOWwtMTYuNS00LjM0Yy0xLjIxLS4zMi0yLjk4LTEuNDItNC4wMS0yLjA4LTIuMzgtMS41My0zLjQxLTMuODUtMy4yMi02LjUyLjE1LTIuMjksMS43Mi00LjQ3LDQuMDQtNS43MiwxMC4wNy00LjQ4LDIwLjE3LDIuNzQsMjQuMDgsMTIuNDJsMjYuOTEtMTQuMjdjLTQuNjgtMTAuMzMtMTMuNjktMTcuNzctMjMuODUtMjEuODhsLTkuNjMtMy4wOGMtMTQuMjMtMy4wMy0zMS4zNy0uMjMtNDIuNTMsOS4zMS03LjM1LDYuMjctMTEuNDksMTUtMTEuNzQsMjQuNzItLjUxLDIwLjU0LDEyLjU1LDMwLjg1LDMxLjM3LDM1LjQ5bDE1Ljk4LDMuOTRjMi43OC42OSw2LjUsMi44Miw3LjQ3LDUuMzcsMS41NCw0LjA0LS42OCw4LjM3LTQuODQsOS44NC0xMS4yOSw0LjA2LTIyLjM2LTMuMTItMjcuMjgtMTQuMDNsLTI2Ljg0LDE0Ljc4YzQuODIsMTAuNywxMi4zNCwxNy43NiwyMi44NiwyMi42NCwxMy4yNCw1LjcxLDI5LjksNi40NCw0My4yLDEuNzYsMTUuNDMtNS40NCwyNi4yNS0xOC4wMywyNi41NS0zNC43NS4xNS03LjYyLTIuMzYtMTQuNjQtNy41MS0yMC4yOC02LjQxLTcuMDMtMTUuMy0xMC44Ny0yNC41MS0xMy4zWiIvPgogICAgPHBhdGggZD0iTTc5NC41OSwxODMuMjNjLTE3LjA0LDguNjgtMzkuNTIsMy4zMi00NS43Mi0xNS4xMS00Ljc5LTE0LjIyLDEuMDktMzAsMTUuMjctMzYuMTYsMTIuNjctNS4zMiwyNi43Ny0yLjU0LDM3LjgxLDUuNTJ2LTMxLjIyYy0xMy45LTguMDctMzIuOTMtOC43Mi00OC4xNC00LjA0LTE5LjcxLDYuMTctMzQuMTksMjIuMS0zOC40Niw0Mi4yNC00LjM2LDIwLjU0Ljk3LDQzLjc4LDE2LjkyLDU3LjkzLDE0LjkyLDEzLjI1LDM0Ljk0LDE3LjMxLDU0LjQsMTMuNDcsNS41My0xLjA5LDEwLjQ4LTMuMDcsMTUuNTEtNS44NmwtLjAyLTMxLjA0LTcuNTYsNC4yN1oiLz4KICA8L2c+CiAgPGc+CiAgICA8Y2lyY2xlIGNsYXNzPSJjbHMtMiIgY3g9IjEzNS40OCIgY3k9IjEzNS40OCIgcj0iMTM1LjQ4Ii8+CiAgICA8cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik01NC4xNywxMDIuOTZoMzIuNTJ2MzIuNTJoOTcuNTd2LTMyLjUyaDMyLjUydjY1LjA1SDU0LjE3di02NS4wNVoiLz4KICA8L2c+Cjwvc3ZnPg==" alt="Couchbase">
+    <img class="logo logo-dark" src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1uYW1lPSJMYXllciAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNDM2IDI3MC45NyI+CiAgPGRlZnM+CiAgICA8c3R5bGU+CiAgICAgIC5jbHMtMSB7CiAgICAgICAgZmlsbDogI2ZmZjsKICAgICAgfQoKICAgICAgLmNscy0yIHsKICAgICAgICBmaWxsOiAjZWMxMjE4OwogICAgICB9CiAgICA8L3N0eWxlPgogIDwvZGVmcz4KICA8Zz4KICAgIDxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTEwMzMuOTMsMTA1LjM0aDBjLTE0LjU1LTcuODgtMzMuMjgtNy44NS00Ny42OS40OS0zLjM0LDEuOTMtNi40OCw0LjM5LTguOTYsNy4yN2wtMy4yOSwzLjg0di02MS40NGgtMzIuODZ2MTU4Ljg1aDMyLjgzbC4wOS0xNC4zNWMzLjE2LDQuMTYsNiw3LjI5LDEwLjA3LDkuODgsNy4xNCw0LjU1LDE1LjE4LDYuNjksMjMuNzUsNy4xLDMxLjE0LDEuNDcsNTMuODItMjQuMzEsNTUuNDQtNTQuNjYsMS4yNS0yMy4zMi04LjY4LTQ1Ljc2LTI5LjM4LTU2Ljk4Wk0xMDAxLjcxLDE4Ny4yMmMtMTUuOTksMC0yOC45NS0xMi45NS0yOC45NS0yOC45NXMxMi45NS0yOC45NSwyOC45NS0yOC45NSwyOC45NCwxMi45NiwyOC45NCwyOC45NS0xMi45NSwyOC45NS0yOC45NCwyOC45NVoiLz4KICAgIDxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTg5NC4zOCwxMDAuMjdjLTE3Ljc0LTMuMTItMzIuNzkuODktNDMuMzksMTUuOTh2LTYwLjc2aC0zMy4ydjE1OC44NWgzMy4yMXMwLTYxLjk4LDAtNjEuOThjLjc2LTEyLjQsNy45Mi0yMi40NywyMC42Mi0yMi42Niw0LjctLjA3LDkuMjUuODMsMTIuOTYsMy43MywzLjI5LDIuNTksNS45OSw2LjA3LDYuNTcsMTAuMjFsMS4xMSw3Ljd2NjMuMDFoMzMuMTl2LTY5LjIxYy0uMTktMTAuMjMtMS41Ny0xOS4xLTYuOTItMjgtNS4zNC04LjkxLTEzLjkzLTE0Ljg4LTI0LjE1LTE2Ljg3WiIvPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNNDI0LjIxLDE3OC4xOGMtOC42NCwzLjk2LTE3Ljc4LDUuNzgtMjcuMzUsNS40Mi0xOC4wMy0uNTItMzQuNy0xMS42Mi00MS43Ni0yOC4xMi01LjU5LTEzLjA0LTUuNi0yNy43MS0uMS00MC43NCw2LjctMTUuODcsMjEuMDctMjYuNzMsMzguMi0yOC41MiwxNi45OC0xLjc3LDMxLjMxLDMuNjIsNDUuMTEsMTMuNzV2LTM2LjI1bC00LjgyLTIuNTItNC4yNC0yYy0xOS40OC05LjItNDUuNDMtOC42MS02NS4wNS4zMS0xOS44LDktMzQuNjYsMjMuODktNDIuNjcsNDQuMTQtNy4yNiwxOC4zNi03LjU5LDM5LjY2LTEuNzEsNTguMzIsNS4zLDE2Ljg0LDE1Ljk0LDMxLjI1LDMwLjQ0LDQxLjEyLDIuNzksMS45LDUuNTIsMy42NSw4LjUzLDUuMDhsNC44NywyLjMxYzI0LjYyLDEwLjMzLDUxLjU0LDguODksNzQuODktNC4zMWguMDJsLS4wMy0zNi4xMmMtNC45LDMuMjYtOS4zMiw1LjgzLTE0LjM0LDguMTRaIi8+CiAgICA8cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik0xMTY0LjQ0LDExNi40OWwtMy42NC00LjI3Yy0zLjg3LTQuNTQtOS4wMS03LjUxLTE0LjY5LTkuNTYtMjQuOC04LjkyLTUwLjI4LDEuMzEtNjMuMTcsMjQuMjctMTAuMzIsMTguMzktMTAuNSw0Mi41OS0uODEsNjEuMywxMi4xOCwyMy40NiwzOC4zOSwzNC44MSw2My40MywyNS42OCw3Ljk0LTIuODksMTMuODYtNy44NiwxOC43OS0xNC4wOGgwbC4xNywxNC41MmgzMi4zOHYtMTEyLjE4aC0zMi40bC0uMDcsMTQuMzNaTTExMzYuNzYsMTg3LjIxYy0xNS45OCwwLTI4Ljk0LTEyLjk1LTI4Ljk0LTI4Ljk1czEyLjk1LTI4Ljk1LDI4Ljk0LTI4Ljk1LDI4Ljk1LDEyLjk2LDI4Ljk1LDI4Ljk1LTEyLjk1LDI4Ljk1LTI4Ljk1LDI4Ljk1WiIvPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNNTE0Ljc0LDk4LjEzYy0zMy4yMiwwLTYwLjE0LDI2LjkzLTYwLjE0LDYwLjE0czI2LjkyLDYwLjE0LDYwLjE0LDYwLjE0LDYwLjE0LTI2LjkzLDYwLjE0LTYwLjE0LTI2LjkzLTYwLjE0LTYwLjE0LTYwLjE0Wk01MTQuNzMsMTg2LjczYy0xNS43MiwwLTI4LjQ2LTEyLjc0LTI4LjQ2LTI4LjQ2czEyLjc0LTI4LjQ2LDI4LjQ2LTI4LjQ2LDI4LjQ2LDEyLjc0LDI4LjQ2LDI4LjQ2LTEyLjc0LDI4LjQ2LTI4LjQ2LDI4LjQ2WiIvPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMTQyOC44NywxMjguNTJjLTQuOTktMTAuMjEtMTUuNzctMjAuNjUtMjYuMi0yNC41NmwtNS4xOC0xLjkzYy0yNi40LTcuODctNTQuNDksMS4xNS02OC42OSwyNS4yN2wtMy40Miw2LjgyYy0zLjgzLDkuMDYtNS4xNCwxOC42OC00LjU0LDI4LjU4LDEuMzEsMjIuMDMsMTMuNjYsNDEuMzgsMzQuMTQsNDkuODEsMTMuMTgsNS40MywyOC4xNyw2LjA1LDQyLjAxLDIuODYsMTUuNjgtMy45NCwyNy43OS0xMy41OSwzNS4xOS0yNy44NGwtMjguMDctMTEuMTNjLTQuNDcsNy40Ni0xMC41MSwxMi40OC0xOS4zOSwxMy4zNWgwYy01LjE5LjU3LTEwLjE2LjUyLTE0LjY2LTEuNTVsLTMuOTQtMS44Mi00LjQ4LTMuMDNjLTQuMTMtMi44LTguMjYtMTAuMDctOC40Ny0xNS45OGg4Mi40MWMxLjMyLTEzLjQ1LS41LTI2Ljg2LTYuNzItMzguODVaTTE0MDMuNDUsMTQ1LjgzczAsMCwwLDBsLTQ5Ljk2LjAyYy45OS04LjM3LDYuOTItMTQuODQsMTQuNjctMTguNDcsNi44OS0zLjI0LDE1LjU2LTIuOCwyMi41MS40MiwyLjkzLDEuMzYsNS4yNiwzLjUxLDcuNTEsNS43OSwyLjg2LDMuMzMsNC41Myw2Ljk3LDUuMjcsMTIuMjRoMFoiLz4KICAgIDxwb2x5Z29uIGNsYXNzPSJjbHMtMSIgcG9pbnRzPSIxNDA3LjQ1IDE0NS44MyAxNDA3LjQ1IDE0NS44MiAxNDA3LjQ1IDE0NS44MiAxNDA3LjQ1IDE0NS44MyIvPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNNjY0LjM1LDE2MS43NmMtLjE2LDEwLjA3LTMuNDgsMTkuNy0xMi44NSwyMy41OS0zLjU1LDEuNDctNy4zNiwxLjcxLTExLjE4LDEuMzItMTEuNDctMS4xNy0xNi41NC0xMS4yMS0xNi42Ny0yMi40MnYtNjIuMDloLTMzLjA5djcxLjU0Yy40MSwxMy40MSw0LjQxLDI2LjUzLDE0Ljc1LDM1LjA1LDMuNjEsMi45Nyw3LjUyLDUuMTgsMTIuMDYsNi41MSw4LjM4LDIuNDUsMTcuMjYsMi43OCwyNS43MS41Myw4Ljk3LTIuMzksMTUuODctNy44LDIxLjE4LTE1LjQ4bC4xMywxNC4wM2gzMy4wN3YtMTEyLjE4aDBzLTMzLjExLDAtMzMuMTEsMHY1OS42WiIvPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMTI3My41MiwxNDUuOWwtMTYuNS00LjM0Yy0xLjIxLS4zMi0yLjk4LTEuNDItNC4wMS0yLjA4LTIuMzgtMS41My0zLjQxLTMuODUtMy4yMi02LjUyLjE1LTIuMjksMS43Mi00LjQ3LDQuMDQtNS43MiwxMC4wNy00LjQ4LDIwLjE3LDIuNzQsMjQuMDgsMTIuNDJsMjYuOTEtMTQuMjdjLTQuNjgtMTAuMzMtMTMuNjktMTcuNzctMjMuODUtMjEuODhsLTkuNjMtMy4wOGMtMTQuMjMtMy4wMy0zMS4zNy0uMjMtNDIuNTMsOS4zMS03LjM1LDYuMjctMTEuNDksMTUtMTEuNzQsMjQuNzItLjUxLDIwLjU0LDEyLjU1LDMwLjg1LDMxLjM3LDM1LjQ5bDE1Ljk4LDMuOTRjMi43OC42OSw2LjUsMi44Miw3LjQ3LDUuMzcsMS41NCw0LjA0LS42OCw4LjM3LTQuODQsOS44NC0xMS4yOSw0LjA2LTIyLjM2LTMuMTItMjcuMjgtMTQuMDNsLTI2Ljg0LDE0Ljc4YzQuODIsMTAuNywxMi4zNCwxNy43NiwyMi44NiwyMi42NCwxMy4yNCw1LjcxLDI5LjksNi40NCw0My4yLDEuNzYsMTUuNDMtNS40NCwyNi4yNS0xOC4wMywyNi41NS0zNC43NS4xNS03LjYyLTIuMzYtMTQuNjQtNy41MS0yMC4yOC02LjQxLTcuMDMtMTUuMy0xMC44Ny0yNC41MS0xMy4zWiIvPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNNzk0LjU5LDE4My4yM2MtMTcuMDQsOC42OC0zOS41MiwzLjMyLTQ1LjcyLTE1LjExLTQuNzktMTQuMjIsMS4wOS0zMCwxNS4yNy0zNi4xNiwxMi42Ny01LjMyLDI2Ljc3LTIuNTQsMzcuODEsNS41MnYtMzEuMjJjLTEzLjktOC4wNy0zMi45My04LjcyLTQ4LjE0LTQuMDQtMTkuNzEsNi4xNy0zNC4xOSwyMi4xLTM4LjQ2LDQyLjI0LTQuMzYsMjAuNTQuOTcsNDMuNzgsMTYuOTIsNTcuOTMsMTQuOTIsMTMuMjUsMzQuOTQsMTcuMzEsNTQuNCwxMy40Nyw1LjUzLTEuMDksMTAuNDgtMy4wNywxNS41MS01Ljg2bC0uMDItMzEuMDQtNy41Niw0LjI3WiIvPgogIDwvZz4KICA8Zz4KICAgIDxjaXJjbGUgY2xhc3M9ImNscy0yIiBjeD0iMTM1LjQ4IiBjeT0iMTM1LjQ4IiByPSIxMzUuNDgiLz4KICAgIDxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTU0LjE3LDEwMi45NmgzMi41MnYzMi41Mmg5Ny41N3YtMzIuNTJoMzIuNTJ2NjUuMDVINTQuMTd2LTY1LjA1WiIvPgogIDwvZz4KPC9zdmc+" alt="Couchbase">
+  </div>
+  <h1>Edge-to-cloud sync, streamed in real time</h1>
+  <p class="subtitle">Couchbase Edge Server, Capella App Services and the Couchbase Kafka connector</p>
+
+  <div class="mapwrap">
+    <svg id="map" viewBox="0 0 1200 700" role="img" aria-labelledby="map-desc">
+      <desc id="map-desc">Smart meters and field devices in two R&amp;D sites write to local Edge Servers, which sync to each site’s Edge Server and then to Capella App Services. Every change in Capella streams through the Kafka connector to a local Kafka topic and an IoT consumer.</desc>
+    </svg>
+  </div>
+
+  <div class="controls" role="group" aria-label="Simulation controls">
+    <button id="play" class="primary" aria-pressed="false">Pause</button>
+    <button id="reset">Reset counters</button>
+    <label class="rate">Device write rate
+      <input id="rate" type="range" min="0.5" max="4" step="0.5" value="1" aria-describedby="rate-out">
+      <output id="rate-out">1×</output>
+    </label>
+    <span class="gap"></span>
+    <button data-scenario="restore">Restore all links</button>
+    <button data-scenario="lab1de">Lab 1 DE loses its uplink</button>
+    <button data-scenario="dewan">Germany loses its WAN</button>
+    <button data-scenario="ukiso">UK fully isolated</button>
+    <button data-scenario="cdc">Pause the Kafka connector</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <section class="story" aria-live="polite">
+    <h2 id="story-title">All links up</h2>
+    <div id="story-body"></div>
+  </section>
+
+  <div class="legend">
+    <span><i style="background:var(--orange)"></i>Device write over REST</span>
+    <span><i style="background:var(--red)"></i>One-way sync, upstream only</span>
+    <span><i style="background:var(--teal)"></i>Change event, Capella to Kafka (CDC)</span>
+    <span><i class="dash"></i>Link offline</span>
+  </div>
+  <p class="note">Simulated flow. The latency figures in the top-left corner were measured in the PoC demo setup and are shown for reference.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  const NS = "http://www.w3.org/2000/svg";
+  const W = 1200, SITE_Y = 465;
+  const svg = document.getElementById("map");
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function txt(parent, x, y, s, cls, anchor) {
+    const e = el("text", { x, y, class: cls, "text-anchor": anchor || "middle" }, parent);
+    e.textContent = s;
+    return e;
+  }
+  const layer = {};
+  ["back", "links", "dots", "nodes", "text"].forEach((k) => { layer[k] = el("g", {}, svg); });
+
+  /* ---------- icons ---------- */
+  function iconGroup(x, y, scale) {
+    const outer = el("g", { transform: `translate(${x} ${y})${scale ? ` scale(${scale})` : ""}` }, layer.nodes);
+    return el("g", { class: "pulse" }, outer);
+  }
+  const ICON = {
+    meter(g) { el("circle", { r: 9, class: "ic" }, g); el("path", { d: "M0 0 L4 -5", class: "ic-line" }, g); },
+    gateway(g) {
+      el("path", { d: "M-9 -10 L-12 -17 M9 -10 L12 -17", class: "ic-line" }, g);
+      el("rect", { x: -17, y: -10, width: 34, height: 20, rx: 4, class: "ic" }, g);
+      el("path", { d: "M-9 0 L1 0", class: "ic-line" }, g);
+      el("circle", { cx: 8, cy: 0, r: 2.2, class: "ic-red" }, g);
+    },
+    server(g) {
+      el("rect", { x: -22, y: -16, width: 44, height: 32, rx: 4, class: "ic" }, g);
+      el("path", { d: "M-14 -5 L6 -5 M-14 5 L6 5", class: "ic-line" }, g);
+      el("circle", { cx: 13, cy: -5, r: 2.2, class: "ic-red" }, g);
+      el("circle", { cx: 13, cy: 5, r: 2.2, class: "ic-red" }, g);
+    },
+    drone(g) {
+      el("path", { d: "M-7 -6 L7 6 M7 -6 L-7 6", class: "ic-line" }, g);
+      [[-7, -6], [7, -6], [-7, 6], [7, 6]].forEach(([cx, cy]) => el("circle", { cx, cy, r: 4, class: "ic" }, g));
+      el("rect", { x: -3.5, y: -3, width: 7, height: 6, rx: 1.5, class: "ic" }, g);
+    },
+    sensor(g) {
+      el("path", { d: "M0 -9 L9 0 L0 9 L-9 0 Z", class: "ic" }, g);
+      el("circle", { r: 2.2, class: "ic-red" }, g);
+    },
+    connector(g) {
+      el("rect", { x: -26, y: -18, width: 52, height: 36, rx: 7, class: "ic" }, g);
+      el("path", { d: "M-13 -5 H12 M8 -9 L12 -5 L8 -1 M13 6 H-12 M-8 2 L-12 6 L-8 10", class: "ic-teal" }, g);
+    },
+    topic(g) {
+      [-14, -3.5, 7].forEach((y, i) => el("rect", { x: -22 + i * 2, y, width: 44 - i * 4, height: 7.5, rx: 2, class: "ic" }, g));
+    },
+    consumer(g) {
+      el("rect", { x: -24, y: -17, width: 48, height: 34, rx: 5, class: "ic" }, g);
+      el("path", { d: "M-15 9 L-6 0 L2 5 L14 -8", class: "ic-teal" }, g);
+    },
+  };
+  function icon(kind, x, y, scale) { const g = iconGroup(x, y, scale); ICON[kind](g); return g; }
+  function bump(g) {
+    if (reduce || !g || !g.animate) return;
+    g.animate([{ transform: "scale(1)" }, { transform: "scale(1.14)" }, { transform: "scale(1)" }], { duration: 280, easing: "ease-out" });
+  }
+
+  /* ---------- paths ---------- */
+  function path(pts) {
+    const segs = []; let len = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      segs.push([len, l, a, b]); len += l;
+    }
+    return { pts, segs, len };
+  }
+  function pointAt(p, d) {
+    for (const [s, l, a, b] of p.segs) {
+      if (d <= s + l) { const f = l ? (d - s) / l : 1; return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]; }
+    }
+    return p.pts[p.pts.length - 1];
+  }
+  function drawLink(p, cls) {
+    return el("polyline", { points: p.pts.map((q) => q.join(",")).join(" "), class: "link " + (cls || "") }, layer.links);
+  }
+
+  /* ---------- state ---------- */
+  const S = { t: 0, running: !reduce, rate: 1, connector: true, links: {} };
+  const linkEls = {};
+  const C = { docs: 0, backlog: 0, sent: -1 };
+  const K = { msgs: 0, done: 0 };
+  const units = [], sites = [];
+
+  /* ---------- top row: measured latency, Capella, Kafka CDC ---------- */
+  el("rect", { x: 20, y: 20, width: 390, height: 170, rx: 18, class: "panel" }, layer.back);
+  txt(layer.text, 38, 48, "Measured in the PoC demo (medians)", "t-strong", "start");
+  [["Edge to Capella", "376 ms"], ["Capella to Kafka (CDC)", "234 ms"], ["End-to-end", "613 ms"]].forEach(([k, v], i) => {
+    txt(layer.text, 38, 82 + i * 26, k, "t-label", "start");
+    txt(layer.text, 392, 82 + i * 26, v, "t-value", "end");
+  });
+  el("path", { d: "M38 147 H392", stroke: "var(--rule)", "stroke-width": 1 }, layer.back);
+  txt(layer.text, 38, 166, "Laptop as edge, one Capella region.", "t-small", "start");
+  txt(layer.text, 38, 180, "Your figures will vary with network and settings.", "t-small", "start");
+
+  el("rect", { x: 440, y: 20, width: 320, height: 170, rx: 18, class: "capella" }, layer.back);
+  // Official Couchbase token (assets/logos/token-red.svg), fixed colours: never recoloured
+  const tok = el("svg", { x: 549, y: 32, width: 23, height: 23, viewBox: "0 0 270.97 270.97", "aria-hidden": "true" }, layer.text);
+  el("circle", { fill: "#ec1218", cx: 135.48, cy: 135.48, r: 135.48 }, tok);
+  el("path", { fill: "#fff", d: "M54.17,102.96h32.52v32.52h97.57v-32.52h32.52v65.05H54.17v-65.05Z" }, tok);
+  txt(layer.text, 584, 50, "Capella", "t-big", "start");
+  txt(layer.text, 600, 70, "Central database (AWS)", "t-small");
+  const capDocs = txt(layer.text, 600, 92, "0 documents", "t-strong");
+  const appOuter = el("g", {}, layer.nodes);
+  const capIcon = el("g", { class: "pulse" }, appOuter);
+  el("rect", { x: 490, y: 110, width: 220, height: 58, rx: 9, class: "appsvc" }, capIcon);
+  txt(capIcon, 600, 134, "App Services", "t-strong");
+  txt(capIcon, 600, 152, "Sync endpoint", "t-small");
+
+  el("rect", { x: 790, y: 20, width: 390, height: 170, rx: 18, class: "panel" }, layer.back);
+  txt(layer.text, 808, 48, "Real-time stream, Kafka CDC", "t-strong", "start");
+  const CY = 102;
+  const cdcLine = drawLink(path([[760, CY], [1110, CY]]), "cdc");
+  const connIcon = icon("connector", 860, CY);
+  const topicIcon = icon("topic", 985, CY);
+  const consIcon = icon("consumer", 1110, CY);
+  txt(layer.text, 860, 140, "Kafka connector", "t-label");
+  txt(layer.text, 985, 140, "Kafka topic", "t-label");
+  txt(layer.text, 1110, 140, "IoT consumer", "t-label");
+  const connState = txt(layer.text, 860, 156, "Streaming", "t-teal");
+  const topicCount = txt(layer.text, 985, 156, "0 messages", "t-teal");
+  const consCount = txt(layer.text, 1110, 156, "0 processed", "t-teal");
+  const connPend = txt(layer.text, 860, 172, "", "t-pend");
+  txt(layer.text, 808, 66, "Reads Capella’s change stream (DCP) into local Kafka", "t-small", "start");
+  const cdc1 = path([[760, CY], [860, CY]]), cdc2 = path([[860, CY], [985, CY]]), cdc3 = path([[985, CY], [1110, CY]]);
+  linkEls.cdc = [cdcLine];
+
+  /* ---------- sites ---------- */
+  const SITES = [
+    { id: "uk", name: "R&D site 1, UK", tag: "UK", label: "UK", m: false },
+    { id: "de", name: "R&D site 2, Germany", tag: "DE", label: "Germany", m: true },
+  ];
+  const UNITS = [
+    { id: "lab1", label: "Lab 1", cy: 335, kind: "lab" },
+    { id: "labn", label: "Lab n", cy: 465, kind: "lab" },
+    { id: "field", label: "Field", cy: 595, kind: "field" },
+  ];
+
+  SITES.forEach((s) => {
+    const X = (x) => (s.m ? W - x : x);
+    const P = (pts) => path(pts.map(([x, y]) => [X(x), y]));
+    const px = s.m ? 610 : 20;
+    el("rect", { x: px, y: 230, width: 570, height: 450, rx: 18, class: "panel" }, layer.back);
+    txt(layer.text, px + 20, 262, s.name, "t-site", "start");
+
+    const site = { id: s.id, name: s.label, docs: 0, outbox: 0, sent: -1, link: s.id + ".wan" };
+    site.icon = icon("server", X(450), SITE_Y, 1.25);
+    txt(layer.text, X(450), SITE_Y - 34, "Site Edge Server", "t-strong");
+    site.countEl = txt(layer.text, X(450), SITE_Y + 38, "0 docs", "t-count");
+    site.pendEl = txt(layer.text, X(450), SITE_Y + 53, "", "t-pend");
+    icon("gateway", X(540), SITE_Y);
+    txt(layer.text, X(540), SITE_Y + 31, "Site gateway", "t-label");
+    site.wan = P([[478, SITE_Y], [540, SITE_Y], [540, 215], [575, 190]]);
+    drawLink(P([[478, SITE_Y], [540, SITE_Y]]));
+    linkEls[site.link] = [drawLink(P([[540, SITE_Y], [540, 215], [575, 190]]))];
+    txt(layer.text, X(532), 300, "WAN sync", "t-small", s.m ? "start" : "end");
+    sites.push(site);
+    S.links[site.link] = true;
+
+    UNITS.forEach((u) => {
+      const cy = u.cy, cx = s.m ? W - 360 : 40;
+      el("rect", { x: cx, y: cy - 55, width: 320, height: 110, rx: 12, class: "card" }, layer.back);
+      const name = u.kind === "field" ? `Field ${s.tag}` : `${u.label} ${s.tag}`;
+      txt(layer.text, cx + 16, cy - 31, name, "t-unit", "start");
+      const unit = { name, site, docs: 0, outbox: 0, sent: -1, next: Math.random() * 2, link: `${s.id}.${u.id}`, rest: [] };
+      if (u.kind === "lab") {
+        [75, 105, 135].forEach((x) => icon("meter", X(x), cy));
+        txt(layer.text, X(105), cy + 30, "Smart meters (1..n)", "t-small");
+        icon("gateway", X(215), cy);
+        txt(layer.text, X(215), cy + 30, "Lab gateway", "t-small");
+        txt(layer.text, X(172), cy - 10, "REST API", "t-small");
+        unit.rest.push(P([[150, cy], [278, cy]]));
+        unit.icon = icon("server", X(300), cy);
+        txt(layer.text, X(300), cy + 31, "Edge Server", "t-label");
+      } else {
+        icon("drone", X(95), cy - 12);
+        icon("sensor", X(95), cy + 18);
+        txt(layer.text, X(95), cy + 43, "Drones and sensors", "t-small");
+        txt(layer.text, X(200), cy - 18, "REST API", "t-small");
+        unit.rest.push(P([[112, cy - 12], [200, cy - 12], [200, cy], [280, cy]]));
+        unit.rest.push(P([[106, cy + 18], [200, cy + 18], [200, cy], [280, cy]]));
+        unit.icon = icon("gateway", X(300), cy, 1.15);
+        txt(layer.text, X(300), cy + 31, "Field gateway", "t-label");
+      }
+      unit.rest.forEach((p) => drawLink(p, "rest"));
+      unit.countEl = txt(layer.text, X(300), cy + 45, "0 docs", "t-count");
+      unit.pendEl = txt(layer.text, X(300), cy - 24, "", "t-pend");
+      unit.up = P([[322, cy], [395, cy], [395, SITE_Y], [422, SITE_Y]]);
+      linkEls[unit.link] = [drawLink(unit.up)];
+      S.links[unit.link] = true;
+      units.push(unit);
+    });
+  });
+
+  /* ---------- tokens ---------- */
+  const tokens = [];
+  function spawn(p, cls, speed, done) {
+    const e = el("circle", { r: 4.6, class: "dot " + cls, cx: p.pts[0][0], cy: p.pts[0][1] }, layer.dots);
+    tokens.push({ p, start: S.t, dur: Math.max(0.15, p.len / speed), e, done });
+  }
+  const GAP = 0.15;
+  function step() {
+    for (const u of units) {
+      if (S.t >= u.next) {
+        u.next = S.t + (1.5 + Math.random() * 1.3) / S.rate;
+        const p = u.rest[Math.floor(Math.random() * u.rest.length)];
+        spawn(p, "rest", 220, () => { u.docs++; u.outbox++; bump(u.icon); });
+      }
+      if (u.outbox > 0 && S.links[u.link] && S.t - u.sent > GAP) {
+        u.outbox--; u.sent = S.t;
+        spawn(u.up, "sync", 260, () => { u.site.docs++; u.site.outbox++; bump(u.site.icon); });
+      }
+    }
+    for (const st of sites) {
+      if (st.outbox > 0 && S.links[st.link] && S.t - st.sent > GAP) {
+        st.outbox--; st.sent = S.t;
+        spawn(st.wan, "sync", 300, () => { C.docs++; C.backlog++; bump(capIcon); });
+      }
+    }
+    if (C.backlog > 0 && S.connector && S.t - C.sent > 0.11) {
+      C.backlog--; C.sent = S.t;
+      spawn(cdc1, "cdc", 360, () => {
+        bump(connIcon);
+        spawn(cdc2, "cdc", 360, () => {
+          K.msgs++; bump(topicIcon);
+          spawn(cdc3, "cdc", 360, () => { K.done++; bump(consIcon); });
+        });
+      });
+    }
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      const k = tokens[i], f = (S.t - k.start) / k.dur;
+      if (f >= 1) { k.e.remove(); tokens.splice(i, 1); if (k.done) k.done(); continue; }
+      const [x, y] = pointAt(k.p, f * k.p.len);
+      k.e.setAttribute("cx", x.toFixed(1)); k.e.setAttribute("cy", y.toFixed(1));
+    }
+  }
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (S.running) { S.t += dt; step(); }
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- links and status ---------- */
+  const LINK_NAMES = {};
+  units.forEach((u) => { LINK_NAMES[u.link] = `${u.name} uplink`; });
+  sites.forEach((st) => { LINK_NAMES[st.link] = `${st.name} WAN to Capella`; });
+  function setLink(key, up) {
+    if (key === "cdc") S.connector = up; else S.links[key] = up;
+    (linkEls[key] || []).forEach((e) => e.classList.toggle("off", !up));
+    render();
+  }
+  const status = document.getElementById("status");
+  const toggles = {};
+  function group(title, items) {
+    const g = document.createElement("div"); g.className = "group";
+    g.innerHTML = `<h2>${title}</h2><div class="links"></div>`;
+    items.forEach(([key, label]) => {
+      const b = document.createElement("button");
+      b.className = "toggle"; b.setAttribute("role", "switch");
+      b.innerHTML = `<span>${label}</span><span class="state"></span>`;
+      b.addEventListener("click", () => setLink(key, !isUp(key)));
+      g.querySelector(".links").appendChild(b);
+      toggles[key] = b;
+    });
+    status.appendChild(g);
+  }
+  const isUp = (key) => (key === "cdc" ? S.connector : S.links[key]);
+  SITES.forEach((s) => {
+    group(s.name, [
+      [`${s.id}.lab1`, `Lab 1 ${s.tag} uplink`], [`${s.id}.labn`, `Lab n ${s.tag} uplink`],
+      [`${s.id}.field`, `Field ${s.tag} uplink`], [`${s.id}.wan`, "WAN to Capella"],
+    ]);
+  });
+  group("Real-time stream", [["cdc", "Kafka connector"]]);
+
+  /* ---------- story ---------- */
+  const storyTitle = document.getElementById("story-title");
+  const storyBody = document.getElementById("story-body");
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  function story() {
+    const downUnits = units.filter((u) => !S.links[u.link]);
+    const downSites = sites.filter((st) => !S.links[st.link]);
+    const lines = [];
+    let title;
+    const isolated = sites.filter((st) => !S.links[st.link] && units.filter((u) => u.site === st).every((u) => !S.links[u.link]));
+    const downCount = downUnits.length + downSites.length + (S.connector ? 0 : 1);
+    if (downCount === 0) title = "All links up";
+    else if (isolated.length === 1 && downCount === 4) title = `${isolated[0].name} fully isolated`;
+    else if (downCount === 1) title = !S.connector ? "Kafka connector paused" : `${LINK_NAMES[(downUnits[0] || downSites[0]).link]} is down`;
+    else title = `${downCount} links down`;
+
+    if (downCount === 0) {
+      lines.push("Devices write to their local Edge Server, labs and field sync to the site, and sites push to App Services in Capella. Data flows one way, upstream only.");
+      lines.push("Every change that lands in Capella streams to Kafka on premises through the Couchbase Kafka connector, ready for local IoT processing. Cut any link to see what happens.");
+    }
+    if (isolated.length) {
+      isolated.forEach((st) => {
+        const held = units.filter((u) => u.site === st).reduce((a, u) => a + u.outbox, 0);
+        lines.push(`Every ${st.name} lab and field gateway keeps working offline: ${plural(held, "reading waits", "readings wait")} in the local Edge Servers, and ${plural(st.outbox, "more waits", "more wait")} at the Site Edge Server. Everything syncs, in order, once the links return.`);
+      });
+    }
+    downUnits.filter((u) => !isolated.includes(u.site)).forEach((u) => {
+      lines.push(`${u.name} is offline. Its devices keep writing to the local Edge Server, where ${plural(u.outbox, "reading waits", "readings wait")}. They sync in order when the uplink returns.`);
+    });
+    downSites.filter((st) => !isolated.includes(st)).forEach((st) => {
+      lines.push(`${st.name} has lost its WAN. Its labs still sync to the Site Edge Server, which holds ${plural(st.outbox, "reading", "readings")} for Capella until the connection returns.`);
+    });
+    if (!S.connector) {
+      lines.push(`The Kafka connector is paused. Capella keeps every change in its change stream, ${plural(C.backlog, "change", "changes")} not yet streamed. The connector resumes from its saved offset, so Kafka misses nothing.`);
+    }
+    if (downCount > 0 && S.connector && C.backlog === 0) {
+      lines.push("Whatever reaches Capella still streams to Kafka straight away.");
+    }
+    storyTitle.textContent = title;
+    const html = lines.map((l) => `<p>${l}</p>`).join("");
+    if (storyBody.innerHTML !== html) storyBody.innerHTML = html;
+  }
+
+  /* ---------- render ---------- */
+  function set(e, s) { if (e.textContent !== s) e.textContent = s; }
+  function render() {
+    units.forEach((u) => {
+      set(u.countEl, plural(u.docs, "doc", "docs"));
+      set(u.pendEl, !S.links[u.link] && u.outbox ? `${u.outbox} waiting to sync` : "");
+    });
+    sites.forEach((st) => {
+      set(st.countEl, plural(st.docs, "doc", "docs"));
+      set(st.pendEl, !S.links[st.link] && st.outbox ? `${st.outbox} waiting for the WAN` : "");
+    });
+    set(capDocs, plural(C.docs, "document", "documents"));
+    set(connState, S.connector ? "Streaming" : "Paused");
+    set(connPend, !S.connector && C.backlog ? `${C.backlog} changes queued` : "");
+    set(topicCount, plural(K.msgs, "message", "messages"));
+    set(consCount, `${K.done} processed`);
+    Object.keys(toggles).forEach((key) => {
+      const up = isUp(key), b = toggles[key];
+      b.setAttribute("aria-checked", String(up));
+      set(b.querySelector(".state"), key === "cdc" ? (up ? "Running" : "Paused") : up ? "Connected" : "Offline");
+    });
+    story();
+  }
+
+  /* ---------- controls ---------- */
+  const playBtn = document.getElementById("play");
+  function syncPlay() { playBtn.textContent = S.running ? "Pause" : "Play"; playBtn.setAttribute("aria-pressed", String(!S.running)); }
+  playBtn.addEventListener("click", () => { S.running = !S.running; syncPlay(); });
+  document.getElementById("reset").addEventListener("click", () => {
+    units.forEach((u) => { u.docs = 0; u.outbox = 0; });
+    sites.forEach((st) => { st.docs = 0; st.outbox = 0; });
+    C.docs = 0; C.backlog = 0; K.msgs = 0; K.done = 0;
+    tokens.forEach((k) => k.e.remove()); tokens.length = 0;
+    render();
+  });
+  const rate = document.getElementById("rate"), rateOut = document.getElementById("rate-out");
+  rate.addEventListener("input", () => {
+    S.rate = parseFloat(rate.value);
+    rateOut.textContent = `${S.rate}×`;
+    units.forEach((u) => { u.next = Math.min(u.next, S.t + 2 / S.rate); });
+  });
+  const SCEN = {
+    restore: [],
+    lab1de: ["de.lab1"],
+    dewan: ["de.wan"],
+    ukiso: ["uk.lab1", "uk.labn", "uk.field", "uk.wan"],
+    cdc: ["cdc"],
+  };
+  document.querySelectorAll("[data-scenario]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const down = SCEN[b.dataset.scenario];
+      Object.keys(S.links).forEach((k) => setLink(k, !down.includes(k)));
+      setLink("cdc", !down.includes("cdc"));
+    });
+  });
+
+  syncPlay();
+  render();
+  setInterval(render, 250);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

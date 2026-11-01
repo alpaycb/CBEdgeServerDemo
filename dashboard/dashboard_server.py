@@ -37,6 +37,7 @@ CAPELLA_PASSWORD = os.environ.get("CAPELLA_PASSWORD", "")
 
 SITE = os.environ.get("SITE_NAME", "uk")
 LAB = os.environ.get("LAB_NAME", "lab1")
+LATEST_KEY = os.environ.get("LATEST_KEY", "latest")  # must match the simulator
 
 DEVICE_IDS = ["ambr250-bioreactor01-vessel01", "ambr250-bioreactor02-vessel01"]
 
@@ -103,7 +104,7 @@ def build_status():
     # verify completeness, not just "what's current."
     out = {"lab": {}, "site": {}}
     for dev in DEVICE_IDS:
-        doc_id = f"{SITE}::{LAB}::{dev}::latest"
+        doc_id = f"{SITE}::{LAB}::{dev}::{LATEST_KEY}"
         out["lab"][dev] = fetch_doc(LAB_URL, "labdata.metrics", doc_id, EDGE_USER, EDGE_PASSWORD)
         out["site"][dev] = fetch_doc(SITE_URL, "sitedata.metrics", doc_id, EDGE_USER, EDGE_PASSWORD)
         #out["lab"][dev] = fetch_doc(LAB_URL, "db", doc_id, EDGE_USER, EDGE_PASSWORD)
@@ -111,7 +112,7 @@ def build_status():
     if CAPELLA_URL:
         out["capella"] = {}
         for dev in DEVICE_IDS:
-            doc_id = f"{SITE}::{LAB}::{dev}::latest"
+            doc_id = f"{SITE}::{LAB}::{dev}::{LATEST_KEY}"
             out["capella"][dev] = fetch_doc(CAPELLA_URL, "", doc_id, CAPELLA_USER, CAPELLA_PASSWORD)
     out["_pending"] = build_pending()
     return out
