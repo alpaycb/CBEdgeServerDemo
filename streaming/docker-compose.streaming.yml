@@ -1,0 +1,52 @@
+# Local streaming tier for a customer demo: a single-node Kafka broker and a
+# Kafka Connect worker running the Couchbase Kafka Source Connector (DCP CDC).
+# Separate Compose project, so it never touches the edge stack.
+#
+#   python3 setup_connector_plugin.py                     # once: fetch the connector
+#   docker compose -f docker-compose.streaming.yml up -d
+#   python3 register_connector.py                         # point it at Capella
+name: customer-streaming
+
+services:
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: customer-kafka
+    ports:
+      - "29092:29092"   # host access for the Python consumer / bridge
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: CONTROLLER://:29093,PLAINTEXT://:19092,PLAINTEXT_HOST://:29092
+      # 127.0.0.1, not localhost: avoids the Docker Desktop IPv6 loopback hang on macOS
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,PLAINTEXT_HOST://127.0.0.1:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      # The broker stamps each record when it arrives. That gives the latency
+      # consumer an "arrived in local Kafka" time on the local clock.
+      KAFKA_LOG_MESSAGE_TIMESTAMP_TYPE: LogAppendTime
+    restart: unless-stopped
+
+  connect:
+    image: apache/kafka:3.9.0   # same image, running the Connect worker instead of a broker
+    container_name: customer-connect
+    depends_on:
+      - kafka
+    entrypoint: ["/opt/kafka/bin/connect-distributed.sh", "/etc/connect/connect-distributed.properties"]
+    environment:
+      LOG_DIR: /tmp/connect-logs
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx1g"
+    ports:
+      - "8083:8083"     # Kafka Connect REST API
+    volumes:
+      - ./connect/connect-distributed.properties:/etc/connect/connect-distributed.properties:ro
+      - ./plugins:/plugins:ro
+    restart: unless-stopped   # also covers the worker starting before the broker is ready
